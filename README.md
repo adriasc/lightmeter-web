@@ -12,14 +12,14 @@ This is a browser-based version of your light meter app.
 
 ## Important
 - Your original iOS/Xcode app is still untouched in:
-  - `/Users/adriasalvadocoloma/Documents/CODEX/LightMeteriOS`
+  - `/Users/xxxxxxxxxxxxxxx/CODEX/LightMeteriOS`
 
 ## Run locally from VS Code
 
 Camera access usually requires `http://localhost` or `https` (not plain `file://`).
 
 ### Option A: VS Code Live Server (easiest)
-1. Open folder `/Users/adriasalvadocoloma/Documents/CODEX/LightMeterWeb` in VS Code.
+1. Open folder `/Users/xxxxxxxxxxxxx/CODEX/LightMeterWeb` in VS Code.
 2. Install extension **Live Server**.
 3. Right click `index.html` -> **Open with Live Server**.
 4. On this computer, open the shown URL in browser.
@@ -28,7 +28,7 @@ Camera access usually requires `http://localhost` or `https` (not plain `file://
 From terminal in this folder:
 
 ```bash
-cd /Users/adriasalvadocoloma/Documents/CODEX/LightMeterWeb
+cd /Users/xxxxxxxxxxxxxxxxxxxxxxxx/CODEX/LightMeterWeb
 python3 -m http.server 8080
 ```
 
