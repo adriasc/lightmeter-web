@@ -1,4 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
+const APP_VERSION = "1.4.0";
 const APERTURES = [1.4, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0];
 const SHUTTERS = [
   1 / 2000,
@@ -32,6 +33,7 @@ const zoneOverlay = document.getElementById("zoneOverlay");
 const tapMarker = document.getElementById("tapMarker");
 const startBtn = document.getElementById("startBtn");
 const evReadout = document.getElementById("evReadout");
+const appVersion = document.getElementById("appVersion");
 const isoSelect = document.getElementById("isoSelect");
 const shutterTable = document.getElementById("shutterTable");
 const apertureTable = document.getElementById("apertureTable");
@@ -49,6 +51,7 @@ let smoothedEV = 10;
 init();
 
 function init() {
+  if (appVersion) appVersion.textContent = `v${APP_VERSION}`;
   buildISOSelect();
   renderTapMarker();
   renderTables(smoothedEV);

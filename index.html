@@ -4,13 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Film Light Meter (Web)</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=1.4.0" />
   </head>
   <body>
     <main class="app">
       <header class="topbar">
         <h1>Film Light Meter</h1>
-        <div class="ev-readout">EV100 <span id="evReadout">--.-</span></div>
+        <div class="ev-readout">EV100 <span id="evReadout">--.-</span> | <span id="appVersion">v---</span></div>
       </header>
 
       <section class="camera-card">
@@ -21,7 +21,7 @@
           <div id="tapMarker" class="tap-marker" aria-hidden="true"></div>
           <button id="startBtn" class="start-btn">Start Camera</button>
         </div>
-        <p class="hint">Tap on the scene. Metering snaps to that zone center. The selected zone is the 0.0 reference.</p>
+        <p class="hint">Tap on the scene. Metering snaps to that zone center. The selected zone is the 0.0 reference. Zone numbers are f-stops relative to that reference.</p>
       </section>
 
       <section class="controls">
@@ -58,6 +58,6 @@
       </section>
     </main>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=1.4.0"></script>
   </body>
 </html>

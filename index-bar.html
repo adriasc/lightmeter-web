@@ -4,13 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Film Light Meter (Horizontal Bars)</title>
-    <link rel="stylesheet" href="styles-bar.css" />
+    <link rel="stylesheet" href="styles-bar.css?v=1.4.0" />
   </head>
   <body>
     <main class="app">
       <header class="topbar">
         <h1>Film Light Meter</h1>
-        <div class="ev-readout">EV100 <span id="evReadout">--.-</span></div>
+        <div class="ev-readout">EV100 <span id="evReadout">--.-</span> | <span id="appVersion">v---</span></div>
       </header>
 
       <section class="camera-wrap" id="cameraWrap">
@@ -21,7 +21,7 @@
         <button id="startBtn" class="start-btn">Start Camera</button>
       </section>
 
-      <p class="hint">Tap scene to meter (snaps to zone center).</p>
+      <p class="hint">Tap anywhere to meter that exact point (small local patch around marker). Zone numbers are f-stops relative to this point.</p>
 
       <section class="bottom-panel">
         <div class="iso-row">
@@ -41,6 +41,6 @@
       </section>
     </main>
 
-    <script src="app-bar.js"></script>
+    <script src="app-bar.js?v=1.4.0"></script>
   </body>
 </html>
