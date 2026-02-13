@@ -23,6 +23,8 @@ const UPDATE_INTERVAL_MS = 220;
 const GRID_SMOOTHING = 0.34;
 const EV_SMOOTHING = 0.25;
 const NEAR_ZERO_THRESHOLD = 0.2;
+const REF_PATCH_RADIUS_PX = 14;
+const REF_PATCH_STEP_PX = 2;
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("meterCanvas");
@@ -43,6 +45,7 @@ let animationFrameId = null;
 let lastMeterTs = 0;
 let smoothedGrid = null;
 let smoothedEV = 10;
+let smoothedRefLuma = null;
 
 init();
 
@@ -116,11 +119,10 @@ function onCameraTap(event) {
   const x = clamp((event.clientX - rect.left) / rect.width, 0, 1);
   const y = clamp((event.clientY - rect.top) / rect.height, 0, 1);
 
-  const col = clamp(Math.floor(x * GRID_COLS), 0, GRID_COLS - 1);
-  const row = clamp(Math.floor(y * GRID_ROWS), 0, GRID_ROWS - 1);
-
+  referencePoint = { x, y };
+  const col = clamp(Math.floor(referencePoint.x * GRID_COLS), 0, GRID_COLS - 1);
+  const row = clamp(Math.floor(referencePoint.y * GRID_ROWS), 0, GRID_ROWS - 1);
   referenceCell = { row, col };
-  referencePoint = cellCenter(row, col);
 
   renderTapMarker();
   paintReferenceCell();
@@ -189,7 +191,12 @@ function meterFrame() {
   }
 
   smoothedGrid = smoothGrid(smoothedGrid, rawGrid, GRID_SMOOTHING);
-  const refLuma = Math.max(smoothedGrid[referenceCell.row][referenceCell.col], 1e-4);
+  const refPixelX = clamp(Math.round(referencePoint.x * (w - 1)), 0, w - 1);
+  const refPixelY = clamp(Math.round(referencePoint.y * (h - 1)), 0, h - 1);
+  const rawRefLuma = sampleLumaPatch(data, w, h, refPixelX, refPixelY, REF_PATCH_RADIUS_PX, REF_PATCH_STEP_PX);
+  smoothedRefLuma = smoothedRefLuma === null ? rawRefLuma : blend(smoothedRefLuma, rawRefLuma, GRID_SMOOTHING);
+
+  const refLuma = Math.max(smoothedRefLuma, 1e-4);
   const zoneStops = smoothedGrid.map((row) => row.map((v) => Math.log2(v / refLuma)));
 
   updateZoneOverlay(zoneStops);
@@ -244,6 +251,29 @@ function createZoneCells() {
       zoneOverlay.appendChild(cell);
     }
   }
+}
+
+function sampleLumaPatch(imageData, w, h, cx, cy, radius, step) {
+  const x0 = Math.max(0, cx - radius);
+  const x1 = Math.min(w - 1, cx + radius);
+  const y0 = Math.max(0, cy - radius);
+  const y1 = Math.min(h - 1, cy + radius);
+
+  let sum = 0;
+  let count = 0;
+
+  for (let y = y0; y <= y1; y += step) {
+    for (let x = x0; x <= x1; x += step) {
+      const idx = (y * w + x) * 4;
+      const r = imageData[idx] / 255;
+      const g = imageData[idx + 1] / 255;
+      const b = imageData[idx + 2] / 255;
+      sum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      count += 1;
+    }
+  }
+
+  return Math.max(sum / Math.max(count, 1), 1e-4);
 }
 
 function paintReferenceCell() {
