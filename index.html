@@ -21,7 +21,7 @@
           <div id="tapMarker" class="tap-marker" aria-hidden="true"></div>
           <button id="startBtn" class="start-btn">Start Camera</button>
         </div>
-        <p class="hint">Tap anywhere in the live view to set the metering point (0.0 stop).</p>
+        <p class="hint">Tap on the scene. Metering snaps to that zone center. The selected zone is the 0.0 reference.</p>
       </section>
 
       <section class="controls">
@@ -53,8 +53,7 @@
 
       <section class="note">
         <p>
-          Note: browser camera APIs do not expose full exposure metadata, so EV is an estimate from image brightness.
-          Relative zone values (+/- stops) are accurate relative to your tapped meter point.
+          Relative zone values are in stops versus the selected 0.0 zone. Positive numbers are brighter; negatives are darker.
         </p>
       </section>
     </main>

@@ -31,8 +31,8 @@ const tapMarker = document.getElementById("tapMarker");
 const startBtn = document.getElementById("startBtn");
 const evReadout = document.getElementById("evReadout");
 const isoSelect = document.getElementById("isoSelect");
-const shutterTable = document.getElementById("shutterTable");
-const apertureTable = document.getElementById("apertureTable");
+const apertureBar = document.getElementById("apertureBar");
+const shutterBar = document.getElementById("shutterBar");
 const cameraWrap = document.getElementById("cameraWrap");
 
 let selectedISO = 400;
@@ -47,27 +47,24 @@ let smoothedEV = 10;
 init();
 
 function init() {
-  buildISOSelect();
-  renderTapMarker();
-  renderTables(smoothedEV);
-  createZoneCells();
-  paintReferenceCell();
-
-  startBtn.addEventListener("click", startCamera);
-  cameraWrap.addEventListener("click", onCameraTap);
-  isoSelect.addEventListener("change", () => {
-    selectedISO = Number(isoSelect.value);
-    renderTables(smoothedEV);
-  });
-}
-
-function buildISOSelect() {
   ISO_VALUES.forEach((iso) => {
     const option = document.createElement("option");
     option.value = String(iso);
     option.textContent = String(iso);
     if (iso === selectedISO) option.selected = true;
     isoSelect.appendChild(option);
+  });
+
+  renderTapMarker();
+  createZoneCells();
+  paintReferenceCell();
+  renderBars(smoothedEV);
+
+  startBtn.addEventListener("click", startCamera);
+  cameraWrap.addEventListener("click", onCameraTap);
+  isoSelect.addEventListener("change", () => {
+    selectedISO = Number(isoSelect.value);
+    renderBars(smoothedEV);
   });
 }
 
@@ -86,14 +83,12 @@ async function startCamera() {
     });
 
     video.srcObject = stream;
-
     await video.play();
     applyApprox28mmZoom(stream);
 
     startBtn.style.display = "none";
     loopMetering();
-  } catch (error) {
-    console.error(error);
+  } catch {
     startBtn.disabled = false;
     startBtn.textContent = "Camera permission needed";
   }
@@ -106,13 +101,11 @@ async function applyApprox28mmZoom(stream) {
   const caps = track.getCapabilities ? track.getCapabilities() : null;
   if (!caps || typeof caps.zoom !== "object") return;
 
-  const targetZoom = 1.15;
-  const zoom = clamp(targetZoom, caps.zoom.min ?? 1, caps.zoom.max ?? targetZoom);
-
+  const zoom = clamp(1.15, caps.zoom.min ?? 1, caps.zoom.max ?? 1.15);
   try {
     await track.applyConstraints({ advanced: [{ zoom }] });
   } catch {
-    // Keep default framing.
+    // Ignore unsupported zoom controls.
   }
 }
 
@@ -139,9 +132,7 @@ function renderTapMarker() {
 }
 
 function loopMetering() {
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId);
-  }
+  if (animationFrameId) cancelAnimationFrame(animationFrameId);
 
   const tick = (ts) => {
     if (video.videoWidth > 0 && video.videoHeight > 0 && ts - lastMeterTs >= UPDATE_INTERVAL_MS) {
@@ -166,7 +157,7 @@ function meterFrame() {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   ctx.drawImage(video, 0, 0, w, h);
 
-  const imageData = ctx.getImageData(0, 0, w, h).data;
+  const data = ctx.getImageData(0, 0, w, h).data;
   const rawGrid = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(1e-4));
 
   for (let row = 0; row < GRID_ROWS; row += 1) {
@@ -185,11 +176,10 @@ function meterFrame() {
       for (let y = y0; y < y1; y += stepY) {
         for (let x = x0; x < x1; x += stepX) {
           const idx = (y * w + x) * 4;
-          const r = imageData[idx] / 255;
-          const g = imageData[idx + 1] / 255;
-          const b = imageData[idx + 2] / 255;
-          const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-          sum += luma;
+          const r = data[idx] / 255;
+          const g = data[idx + 1] / 255;
+          const b = data[idx + 2] / 255;
+          sum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
           count += 1;
         }
       }
@@ -199,32 +189,69 @@ function meterFrame() {
   }
 
   smoothedGrid = smoothGrid(smoothedGrid, rawGrid, GRID_SMOOTHING);
-
   const refLuma = Math.max(smoothedGrid[referenceCell.row][referenceCell.col], 1e-4);
   const zoneStops = smoothedGrid.map((row) => row.map((v) => Math.log2(v / refLuma)));
+
   updateZoneOverlay(zoneStops);
 
-  const rawEV = estimateEV100(refLuma);
+  const rawEV = Math.log2(refLuma * 100) + EV_CALIBRATION_OFFSET;
   smoothedEV = blend(smoothedEV, rawEV, EV_SMOOTHING);
 
   evReadout.textContent = smoothedEV.toFixed(1);
-  renderTables(smoothedEV);
+  renderBars(smoothedEV);
 }
 
-function estimateEV100(normalizedLuma) {
-  return Math.log2(normalizedLuma * 100) + EV_CALIBRATION_OFFSET;
-}
-
-function renderTables(ev100) {
-  shutterTable.innerHTML = APERTURES.map((ap) => {
+function renderBars(ev100) {
+  apertureBar.innerHTML = APERTURES.map((ap) => {
     const shutter = shutterSeconds(ev100, selectedISO, ap);
-    return `<tr><td>f/${ap.toFixed(1)}</td><td>${formatShutter(shutter)}</td></tr>`;
+    return `<span class="chip">f/${ap.toFixed(1)} -> ${formatShutter(shutter)}</span>`;
   }).join("");
 
-  apertureTable.innerHTML = SHUTTERS.map((sh) => {
+  shutterBar.innerHTML = SHUTTERS.map((sh) => {
     const ap = apertureFor(ev100, selectedISO, sh);
-    return `<tr><td>${formatShutter(sh)}</td><td>f/${ap.toFixed(1)}</td></tr>`;
+    return `<span class="chip">${formatShutter(sh)} -> f/${ap.toFixed(1)}</span>`;
   }).join("");
+}
+
+function updateZoneOverlay(zoneStops) {
+  zoneOverlay.querySelectorAll(".zone-cell").forEach((node) => {
+    const row = Number(node.dataset.row);
+    const col = Number(node.dataset.col);
+    const value = zoneStops[row][col];
+
+    node.textContent = `${value >= 0 ? "+" : ""}${value.toFixed(1)}`;
+
+    node.classList.remove("zone-positive", "zone-negative", "zone-neutral");
+    if (Math.abs(value) <= NEAR_ZERO_THRESHOLD) node.classList.add("zone-neutral");
+    else if (value > 0) node.classList.add("zone-positive");
+    else node.classList.add("zone-negative");
+  });
+
+  paintReferenceCell();
+}
+
+function createZoneCells() {
+  zoneOverlay.innerHTML = "";
+  for (let row = 0; row < GRID_ROWS; row += 1) {
+    for (let col = 0; col < GRID_COLS; col += 1) {
+      const cell = document.createElement("div");
+      cell.className = "zone-cell";
+      cell.dataset.row = String(row);
+      cell.dataset.col = String(col);
+      cell.style.left = `${((col + 0.5) / GRID_COLS) * 100}%`;
+      cell.style.top = `${((row + 0.5) / GRID_ROWS) * 100}%`;
+      cell.textContent = "+0.0";
+      zoneOverlay.appendChild(cell);
+    }
+  }
+}
+
+function paintReferenceCell() {
+  zoneOverlay.querySelectorAll(".zone-cell").forEach((node) => {
+    const row = Number(node.dataset.row);
+    const col = Number(node.dataset.col);
+    node.classList.toggle("reference-zone", row === referenceCell.row && col === referenceCell.col);
+  });
 }
 
 function shutterSeconds(ev100, iso, aperture) {
@@ -240,60 +267,8 @@ function formatShutter(seconds) {
   return `1/${Math.round(1 / seconds)}`;
 }
 
-function createZoneCells() {
-  zoneOverlay.innerHTML = "";
-
-  for (let row = 0; row < GRID_ROWS; row += 1) {
-    for (let col = 0; col < GRID_COLS; col += 1) {
-      const cell = document.createElement("div");
-      cell.className = "zone-cell";
-      cell.dataset.row = String(row);
-      cell.dataset.col = String(col);
-      cell.style.left = `${((col + 0.5) / GRID_COLS) * 100}%`;
-      cell.style.top = `${((row + 0.5) / GRID_ROWS) * 100}%`;
-      cell.textContent = "+0.0";
-      zoneOverlay.appendChild(cell);
-    }
-  }
-}
-
-function updateZoneOverlay(zoneStops) {
-  const nodes = zoneOverlay.querySelectorAll(".zone-cell");
-
-  nodes.forEach((node) => {
-    const row = Number(node.dataset.row);
-    const col = Number(node.dataset.col);
-    const value = zoneStops[row][col];
-
-    const sign = value >= 0 ? "+" : "";
-    node.textContent = `${sign}${value.toFixed(1)}`;
-
-    node.classList.remove("zone-positive", "zone-negative", "zone-neutral");
-    if (Math.abs(value) <= NEAR_ZERO_THRESHOLD) {
-      node.classList.add("zone-neutral");
-    } else if (value > 0) {
-      node.classList.add("zone-positive");
-    } else {
-      node.classList.add("zone-negative");
-    }
-  });
-
-  paintReferenceCell();
-}
-
-function paintReferenceCell() {
-  const nodes = zoneOverlay.querySelectorAll(".zone-cell");
-  nodes.forEach((node) => {
-    const row = Number(node.dataset.row);
-    const col = Number(node.dataset.col);
-    const isRef = row === referenceCell.row && col === referenceCell.col;
-    node.classList.toggle("reference-zone", isRef);
-  });
-}
-
 function smoothGrid(prevGrid, nextGrid, alpha) {
   if (!prevGrid) return nextGrid;
-
   return nextGrid.map((row, r) => row.map((v, c) => blend(prevGrid[r][c], v, alpha)));
 }
 
@@ -302,10 +277,7 @@ function blend(prev, next, alpha) {
 }
 
 function cellCenter(row, col) {
-  return {
-    x: (col + 0.5) / GRID_COLS,
-    y: (row + 0.5) / GRID_ROWS
-  };
+  return { x: (col + 0.5) / GRID_COLS, y: (row + 0.5) / GRID_ROWS };
 }
 
 function clamp(value, min, max) {

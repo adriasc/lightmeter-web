@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Film Light Meter (Horizontal Bars)</title>
+    <link rel="stylesheet" href="styles-bar.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <h1>Film Light Meter</h1>
+        <div class="ev-readout">EV100 <span id="evReadout">--.-</span></div>
+      </header>
+
+      <section class="camera-wrap" id="cameraWrap">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="meterCanvas"></canvas>
+        <div id="zoneOverlay" class="zone-overlay"></div>
+        <div id="tapMarker" class="tap-marker" aria-hidden="true"></div>
+        <button id="startBtn" class="start-btn">Start Camera</button>
+      </section>
+
+      <p class="hint">Tap scene to meter (snaps to zone center).</p>
+
+      <section class="bottom-panel">
+        <div class="iso-row">
+          <label for="isoSelect">ISO</label>
+          <select id="isoSelect"></select>
+        </div>
+
+        <div class="bar-block">
+          <h2>Aperture -> Shutter</h2>
+          <div id="apertureBar" class="scroll-bar"></div>
+        </div>
+
+        <div class="bar-block">
+          <h2>Shutter -> Aperture</h2>
+          <div id="shutterBar" class="scroll-bar"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="app-bar.js"></script>
+  </body>
+</html>

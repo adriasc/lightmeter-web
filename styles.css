@@ -85,6 +85,24 @@ video,
   font-weight: 650;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0.2px;
+  color: #ffffff;
+  border: 1px solid transparent;
+}
+
+.zone-positive {
+  color: #29b3ff;
+}
+
+.zone-negative {
+  color: #ff4b4b;
+}
+
+.zone-neutral {
+  color: #ffffff;
+}
+
+.reference-zone {
+  border-color: rgba(255, 255, 255, 0.9);
 }
 
 .tap-marker {

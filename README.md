@@ -2,42 +2,45 @@
 
 This is a browser-based version of your light meter app.
 
+## Modes
+- Standard mode (tables): `index.html`
+- Horizontal bar mode (bottom bars): `index-bar.html`
+
 ## Features
 - Live camera view (rear camera on iPhone)
 - Approximate 28mm framing (if browser/device supports zoom constraints)
-- Tap-to-meter point (that point becomes `0.0`)
+- Tap-to-meter point (snaps to zone center)
 - Numeric zone values (`+/-` stops relative to metering point)
+- Zone colors:
+  - positive = bright blue
+  - negative = bright red
+  - near zero = white
+- Slower/stabler updates (less flicker)
 - Film ISO selector
-- Shutter-by-aperture and aperture-by-shutter tables
-
-## Important
-- Your original iOS/Xcode app is still untouched in:
-  - `/Users/xxxxxxxxxxxxxxx/CODEX/LightMeteriOS`
+- Exposure suggestions
 
 ## Run locally from VS Code
 
 Camera access usually requires `http://localhost` or `https` (not plain `file://`).
 
-### Option A: VS Code Live Server (easiest)
-1. Open folder `/Users/xxxxxxxxxxxxx/CODEX/LightMeterWeb` in VS Code.
+### Option A: VS Code Live Server
+1. Open this folder in VS Code.
 2. Install extension **Live Server**.
-3. Right click `index.html` -> **Open with Live Server**.
-4. On this computer, open the shown URL in browser.
+3. Right click `index.html` or `index-bar.html` -> **Open with Live Server**.
 
 ### Option B: Python local server
-From terminal in this folder:
+From terminal in this project folder:
 
 ```bash
-cd /Users/xxxxxxxxxxxxxxxxxxxxxxxx/CODEX/LightMeterWeb
 python3 -m http.server 8080
 ```
 
 Open:
-- On same computer: `http://localhost:8080`
-- On iPhone (same Wi-Fi): `http://YOUR_COMPUTER_IP:8080`
+- Standard mode: `http://localhost:8080/index.html`
+- Horizontal bars: `http://localhost:8080/index-bar.html`
 
 ## iPhone test
 1. Open the URL in Safari.
 2. Tap **Start Camera** and allow permission.
 3. Tap scene to set metering point.
-4. Change Film ISO and read both exposure tables.
+4. Change Film ISO and read values.
