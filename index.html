@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Film Light Meter (Web)</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <h1>Film Light Meter</h1>
+        <div class="ev-readout">EV100 <span id="evReadout">--.-</span></div>
+      </header>
+
+      <section class="camera-card">
+        <div class="camera-wrap" id="cameraWrap">
+          <video id="video" autoplay playsinline muted></video>
+          <canvas id="meterCanvas"></canvas>
+          <div id="zoneOverlay" class="zone-overlay"></div>
+          <div id="tapMarker" class="tap-marker" aria-hidden="true"></div>
+          <button id="startBtn" class="start-btn">Start Camera</button>
+        </div>
+        <p class="hint">Tap anywhere in the live view to set the metering point (0.0 stop).</p>
+      </section>
+
+      <section class="controls">
+        <label for="isoSelect">Film ISO</label>
+        <select id="isoSelect"></select>
+      </section>
+
+      <section class="tables">
+        <article class="table-card">
+          <h2>Shutter by Aperture</h2>
+          <table>
+            <thead>
+              <tr><th>Aperture</th><th>Shutter</th></tr>
+            </thead>
+            <tbody id="shutterTable"></tbody>
+          </table>
+        </article>
+
+        <article class="table-card">
+          <h2>Aperture by Shutter</h2>
+          <table>
+            <thead>
+              <tr><th>Shutter</th><th>Aperture</th></tr>
+            </thead>
+            <tbody id="apertureTable"></tbody>
+          </table>
+        </article>
+      </section>
+
+      <section class="note">
+        <p>
+          Note: browser camera APIs do not expose full exposure metadata, so EV is an estimate from image brightness.
+          Relative zone values (+/- stops) are accurate relative to your tapped meter point.
+        </p>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
