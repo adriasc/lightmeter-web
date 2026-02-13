@@ -23,6 +23,8 @@ const UPDATE_INTERVAL_MS = 220;
 const GRID_SMOOTHING = 0.34;
 const EV_SMOOTHING = 0.25;
 const NEAR_ZERO_THRESHOLD = 0.2;
+const ZONE_PATCH_RATIO = 0.09;
+const ZONE_PATCH_STEP_PX = 1;
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("meterCanvas");
@@ -168,33 +170,15 @@ function meterFrame() {
 
   const imageData = ctx.getImageData(0, 0, w, h).data;
   const rawGrid = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(1e-4));
+  const cellW = w / GRID_COLS;
+  const cellH = h / GRID_ROWS;
+  const zonePatchRadius = Math.max(3, Math.floor(Math.min(cellW, cellH) * ZONE_PATCH_RATIO));
 
   for (let row = 0; row < GRID_ROWS; row += 1) {
     for (let col = 0; col < GRID_COLS; col += 1) {
-      const x0 = Math.floor((col * w) / GRID_COLS);
-      const x1 = Math.max(x0 + 1, Math.floor(((col + 1) * w) / GRID_COLS));
-      const y0 = Math.floor((row * h) / GRID_ROWS);
-      const y1 = Math.max(y0 + 1, Math.floor(((row + 1) * h) / GRID_ROWS));
-
-      const stepX = Math.max(1, Math.floor((x1 - x0) / 8));
-      const stepY = Math.max(1, Math.floor((y1 - y0) / 8));
-
-      let sum = 0;
-      let count = 0;
-
-      for (let y = y0; y < y1; y += stepY) {
-        for (let x = x0; x < x1; x += stepX) {
-          const idx = (y * w + x) * 4;
-          const r = imageData[idx] / 255;
-          const g = imageData[idx + 1] / 255;
-          const b = imageData[idx + 2] / 255;
-          const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-          sum += luma;
-          count += 1;
-        }
-      }
-
-      rawGrid[row][col] = Math.max(sum / Math.max(count, 1), 1e-4);
+      const centerX = Math.round(((col + 0.5) * w) / GRID_COLS);
+      const centerY = Math.round(((row + 0.5) * h) / GRID_ROWS);
+      rawGrid[row][col] = sampleLumaPatch(imageData, w, h, centerX, centerY, zonePatchRadius, ZONE_PATCH_STEP_PX);
     }
   }
 
@@ -289,6 +273,34 @@ function paintReferenceCell() {
     const isRef = row === referenceCell.row && col === referenceCell.col;
     node.classList.toggle("reference-zone", isRef);
   });
+}
+
+function sampleLumaPatch(imageData, w, h, cx, cy, radius, step) {
+  const x0 = Math.max(0, cx - radius);
+  const x1 = Math.min(w - 1, cx + radius);
+  const y0 = Math.max(0, cy - radius);
+  const y1 = Math.min(h - 1, cy + radius);
+
+  let sum = 0;
+  let count = 0;
+
+  for (let y = y0; y <= y1; y += step) {
+    for (let x = x0; x <= x1; x += step) {
+      const idx = (y * w + x) * 4;
+      const r = srgbToLinear(imageData[idx] / 255);
+      const g = srgbToLinear(imageData[idx + 1] / 255);
+      const b = srgbToLinear(imageData[idx + 2] / 255);
+      sum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      count += 1;
+    }
+  }
+
+  return Math.max(sum / Math.max(count, 1), 1e-4);
+}
+
+function srgbToLinear(v) {
+  if (v <= 0.04045) return v / 12.92;
+  return Math.pow((v + 0.055) / 1.055, 2.4);
 }
 
 function smoothGrid(prevGrid, nextGrid, alpha) {

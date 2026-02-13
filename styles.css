@@ -79,10 +79,10 @@ video,
   position: absolute;
   transform: translate(-50%, -50%);
   background: rgba(0, 0, 0, 0.58);
-  padding: 3px 6px;
+  padding: 5px 8px;
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 20px;
+  font-weight: 800;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0.2px;
   color: #ffffff;
