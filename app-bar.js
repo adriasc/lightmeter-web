@@ -1,8 +1,7 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "1.7.0";
+const APP_VERSION = "1.8.0";
 const APERTURE_RULER_VALUES = [
-  1.0, 1.1, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.5, 2.8, 3.2, 3.5, 4.0, 4.5, 5.0, 5.6,
-  6.3, 7.1, 8.0, 9.0, 10.0, 11.0, 13.0, 14.0, 16.0, 18.0, 20.0, 22.0
+  1.4, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0, 22.0, 32.0
 ];
 const RULER_SHUTTERS = [
   1 / 8000, 1 / 6400, 1 / 5000, 1 / 4000, 1 / 3200, 1 / 2500, 1 / 2000, 1 / 1600, 1 / 1250, 1 / 1000,
@@ -47,7 +46,7 @@ let lastMeterTs = 0;
 let smoothedGrid = null;
 let smoothedEV = 10;
 let smoothedRefLuma = null;
-let selectedApertureIndex = 9;
+let selectedApertureIndex = 3;
 let isApertureAutoScrolling = false;
 
 init();
