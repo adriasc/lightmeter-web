@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.5.0";
 const APERTURES = [1.4, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0];
 const SHUTTERS = [
   1 / 2000,
@@ -37,8 +37,7 @@ const startBtn = document.getElementById("startBtn");
 const evReadout = document.getElementById("evReadout");
 const appVersion = document.getElementById("appVersion");
 const isoSelect = document.getElementById("isoSelect");
-const apertureBar = document.getElementById("apertureBar");
-const shutterBar = document.getElementById("shutterBar");
+const pairBar = document.getElementById("pairBar");
 const cameraWrap = document.getElementById("cameraWrap");
 
 let selectedISO = 400;
@@ -66,13 +65,13 @@ function init() {
   renderTapMarker();
   createZoneCells();
   paintReferenceCell();
-  renderBars(smoothedEV);
+  renderPairs(smoothedEV);
 
   startBtn.addEventListener("click", startCamera);
   cameraWrap.addEventListener("click", onCameraTap);
   isoSelect.addEventListener("change", () => {
     selectedISO = Number(isoSelect.value);
-    renderBars(smoothedEV);
+    renderPairs(smoothedEV);
   });
 }
 
@@ -193,18 +192,13 @@ function meterFrame() {
   smoothedEV = blend(smoothedEV, rawEV, EV_SMOOTHING);
 
   evReadout.textContent = smoothedEV.toFixed(1);
-  renderBars(smoothedEV);
+  renderPairs(smoothedEV);
 }
 
-function renderBars(ev100) {
-  apertureBar.innerHTML = APERTURES.map((ap) => {
+function renderPairs(ev100) {
+  pairBar.innerHTML = APERTURES.map((ap) => {
     const shutter = shutterSeconds(ev100, selectedISO, ap);
-    return `<span class="chip">f/${ap.toFixed(1)} -> ${formatShutter(shutter)}</span>`;
-  }).join("");
-
-  shutterBar.innerHTML = SHUTTERS.map((sh) => {
-    const ap = apertureFor(ev100, selectedISO, sh);
-    return `<span class="chip">${formatShutter(sh)} -> f/${ap.toFixed(1)}</span>`;
+    return `<span class="pair-chip"><span class="pair-left">f/${ap.toFixed(1)}</span><span class="pair-sep">|</span><span class="pair-right">${formatShutter(shutter)}</span></span>`;
   }).join("");
 }
 
