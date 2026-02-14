@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "1.10.0";
+const APP_VERSION = "2.0.0";
 const APERTURE_RULER_VALUES = [
   1.4, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0, 22.0, 32.0
 ];

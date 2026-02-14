@@ -4,11 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Film Light Meter (Horizontal Bars)</title>
-    <link rel="stylesheet" href="styles-bar.css?v=1.10.0" />
+    <link rel="stylesheet" href="styles-bar.css?v=2.0.0" />
   </head>
   <body>
     <main class="app">
-      <header class="topbar">
+      <header class="topbar glass">
         <h1>Film Light Meter</h1>
         <div class="ev-readout">EV100 <span id="evReadout">--.-</span> | <span id="appVersion">v---</span></div>
       </header>
@@ -21,9 +21,9 @@
         <button id="startBtn" class="start-btn">Start Camera</button>
       </section>
 
-      <p class="hint">Tap a point to lock exposure values there. Tap again anywhere to update the lock.</p>
+      <p class="hint glass">Tap a point to lock exposure values there. Tap again anywhere to update the lock.</p>
 
-      <section class="bottom-panel">
+      <section class="bottom-panel glass">
         <div class="iso-row">
           <label for="isoSelect">ISO</label>
           <select id="isoSelect"></select>
@@ -45,6 +45,6 @@
       </section>
     </main>
 
-    <script src="app-bar.js?v=1.10.0"></script>
+    <script src="app-bar.js?v=2.0.0"></script>
   </body>
 </html>
