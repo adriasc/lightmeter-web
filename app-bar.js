@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.0.0";
+const APP_VERSION = "2.1.0";
 const APERTURE_RULER_VALUES = [
   1.4, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0, 22.0, 32.0
 ];
@@ -33,6 +33,7 @@ const tapMarker = document.getElementById("tapMarker");
 const startBtn = document.getElementById("startBtn");
 const evReadout = document.getElementById("evReadout");
 const appVersion = document.getElementById("appVersion");
+const hintBanner = document.getElementById("hintBanner");
 const isoSelect = document.getElementById("isoSelect");
 const apertureRuler = document.getElementById("apertureRuler");
 const shutterRuler = document.getElementById("shutterRuler");
@@ -56,6 +57,11 @@ init();
 
 function init() {
   if (appVersion) appVersion.textContent = `v${APP_VERSION}`;
+  if (hintBanner) {
+    window.setTimeout(() => {
+      hintBanner.classList.add("is-hidden");
+    }, 3500);
+  }
   ISO_VALUES.forEach((iso) => {
     const option = document.createElement("option");
     option.value = String(iso);

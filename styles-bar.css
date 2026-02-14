@@ -157,6 +157,14 @@ video,
   border: 1px solid rgba(102, 124, 150, 0.28);
   border-radius: 999px;
   background: rgba(12, 17, 25, 0.56);
+  opacity: 1;
+  transition: opacity 420ms ease, transform 420ms ease;
+}
+
+.hint.is-hidden {
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
 }
 
 .bottom-panel {
@@ -241,21 +249,17 @@ select {
 }
 
 .ruler-top {
-  font-size: 0.7rem;
-  font-weight: 700;
+  font-size: 0.9rem;
+  font-weight: 760;
   line-height: 1;
 }
 
 .ruler-tick {
-  margin: 2px auto;
-  width: 2px;
-  height: 6px;
-  background: #d8c2ab;
-  border-radius: 2px;
+  display: none;
 }
 
 .ruler-bottom {
-  font-size: 0.82rem;
+  font-size: 1.04rem;
   font-weight: 800;
   line-height: 1;
   color: #ffffff;
