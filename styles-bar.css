@@ -193,18 +193,25 @@ h2 {
   display: flex;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 8px 12px 10px;
+  padding: 8px 0 10px;
   gap: 8px;
+  scroll-behavior: smooth;
 }
 
 .ruler-col {
-  min-width: 66px;
+  min-width: 70px;
   text-align: center;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: #d8e0ec;
+  opacity: 0.6;
+  transition: opacity 120ms ease;
 }
 
-.ruler-aperture {
+.ruler-col.is-selected {
+  opacity: 1;
+}
+
+.ruler-top {
   font-size: 0.9rem;
   font-weight: 700;
   line-height: 1.1;
@@ -218,7 +225,7 @@ h2 {
   border-radius: 2px;
 }
 
-.ruler-shutter {
+.ruler-bottom {
   font-size: 1.05rem;
   font-weight: 800;
   line-height: 1.1;

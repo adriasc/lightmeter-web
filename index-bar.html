@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Film Light Meter (Horizontal Bars)</title>
-    <link rel="stylesheet" href="styles-bar.css?v=1.6.0" />
+    <link rel="stylesheet" href="styles-bar.css?v=1.7.0" />
   </head>
   <body>
     <main class="app">
@@ -30,15 +30,23 @@
         </div>
 
         <div class="bar-block">
-          <h2>Exposure Ruler (Aperture / Shutter)</h2>
+          <h2>Aperture (manual)</h2>
           <div class="ruler-wrap">
             <div class="ruler-center-line" aria-hidden="true"></div>
-            <div id="exposureRuler" class="exposure-ruler"></div>
+            <div id="apertureRuler" class="exposure-ruler"></div>
+          </div>
+        </div>
+
+        <div class="bar-block">
+          <h2>Shutter (auto from light)</h2>
+          <div class="ruler-wrap">
+            <div class="ruler-center-line" aria-hidden="true"></div>
+            <div id="shutterRuler" class="exposure-ruler"></div>
           </div>
         </div>
       </section>
     </main>
 
-    <script src="app-bar.js?v=1.6.0"></script>
+    <script src="app-bar.js?v=1.7.0"></script>
   </body>
 </html>
