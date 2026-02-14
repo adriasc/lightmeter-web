@@ -87,11 +87,12 @@ video,
 }
 
 .zone-positive-low {
-  color: #63c9ff;
+  color: #53aef0;
 }
 
 .zone-positive-high {
-  color: #1996ff;
+  color: #00b7ff;
+  text-shadow: 0 0 8px rgba(0, 183, 255, 0.7);
 }
 
 .zone-negative-low {

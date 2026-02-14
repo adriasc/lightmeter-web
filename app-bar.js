@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "1.9.0";
+const APP_VERSION = "1.10.0";
 const APERTURE_RULER_VALUES = [
   1.4, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0, 22.0, 32.0
 ];
@@ -18,6 +18,7 @@ const UPDATE_INTERVAL_MS = 220;
 const GRID_SMOOTHING = 0.34;
 const EV_SMOOTHING = 0.25;
 const NEAR_ZERO_THRESHOLD = 0.2;
+const STOP_EXPANSION_FACTOR = 1.8;
 const REF_PATCH_RADIUS_PX = 8;
 const REF_PATCH_STEP_PX = 1;
 const ZONE_PATCH_RATIO = 0.09;
@@ -194,7 +195,7 @@ function meterFrame() {
   smoothedRefLuma = smoothedRefLuma === null ? rawRefLuma : blend(smoothedRefLuma, rawRefLuma, GRID_SMOOTHING);
 
   const refLuma = Math.max(smoothedRefLuma, 1e-4);
-  const zoneStops = smoothedGrid.map((row) => row.map((v) => Math.log2(v / refLuma)));
+  const zoneStops = smoothedGrid.map((row) => row.map((v) => Math.log2(v / refLuma) * STOP_EXPANSION_FACTOR));
 
   updateZoneOverlay(zoneStops);
 
