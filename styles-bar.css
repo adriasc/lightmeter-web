@@ -86,12 +86,20 @@ video,
   border: 1px solid transparent;
 }
 
-.zone-positive {
-  color: var(--positive);
+.zone-positive-low {
+  color: #63c9ff;
 }
 
-.zone-negative {
-  color: var(--negative);
+.zone-positive-high {
+  color: #1996ff;
+}
+
+.zone-negative-low {
+  color: #ff7f7f;
+}
+
+.zone-negative-high {
+  color: #ff4040;
 }
 
 .zone-neutral {
@@ -164,10 +172,12 @@ select {
   margin-top: 5px;
 }
 
-h2 {
-  margin: 0 0 3px;
-  font-size: 0.72rem;
-  color: #c9d1de;
+.bar-block.no-gap {
+  margin-top: 3px;
+}
+
+.bar-block.no-gap + .bar-block.no-gap {
+  margin-top: 0;
 }
 
 .ruler-wrap {

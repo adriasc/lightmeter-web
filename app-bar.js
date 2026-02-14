@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "1.8.0";
+const APP_VERSION = "1.9.0";
 const APERTURE_RULER_VALUES = [
   1.4, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0, 22.0, 32.0
 ];
@@ -46,6 +46,8 @@ let lastMeterTs = 0;
 let smoothedGrid = null;
 let smoothedEV = 10;
 let smoothedRefLuma = null;
+let lockedEV = 10;
+let needsMeterLock = true;
 let selectedApertureIndex = 3;
 let isApertureAutoScrolling = false;
 
@@ -69,13 +71,14 @@ function init() {
   setRulerSidePadding(shutterRuler);
   centerRulerAtIndex(apertureRuler, selectedApertureIndex, false);
   highlightSelectedRulerIndex(apertureRuler, selectedApertureIndex);
-  updateShutterRuler(smoothedEV, false);
+  evReadout.textContent = lockedEV.toFixed(1);
+  updateShutterRuler(lockedEV, false);
 
   startBtn.addEventListener("click", startCamera);
   cameraWrap.addEventListener("click", onCameraTap);
   isoSelect.addEventListener("change", () => {
     selectedISO = Number(isoSelect.value);
-    updateShutterRuler(smoothedEV, true);
+    updateShutterRuler(lockedEV, true);
   });
   apertureRuler.addEventListener("scroll", onApertureRulerScroll, { passive: true });
   window.addEventListener("resize", onResize);
@@ -136,6 +139,7 @@ function onCameraTap(event) {
 
   renderTapMarker();
   paintReferenceCell();
+  needsMeterLock = true;
 }
 
 function renderTapMarker() {
@@ -197,8 +201,12 @@ function meterFrame() {
   const rawEV = Math.log2(refLuma * 100) + EV_CALIBRATION_OFFSET;
   smoothedEV = blend(smoothedEV, rawEV, EV_SMOOTHING);
 
-  evReadout.textContent = smoothedEV.toFixed(1);
-  updateShutterRuler(smoothedEV, true);
+  if (needsMeterLock) {
+    lockedEV = smoothedEV;
+    needsMeterLock = false;
+    evReadout.textContent = lockedEV.toFixed(1);
+    updateShutterRuler(lockedEV, true);
+  }
 }
 
 function buildRulers() {
@@ -227,7 +235,7 @@ function onApertureRulerScroll() {
   if (index !== selectedApertureIndex) {
     selectedApertureIndex = index;
     highlightSelectedRulerIndex(apertureRuler, selectedApertureIndex);
-    updateShutterRuler(smoothedEV, true);
+    updateShutterRuler(lockedEV, true);
   }
 }
 
@@ -235,7 +243,7 @@ function onResize() {
   setRulerSidePadding(apertureRuler);
   setRulerSidePadding(shutterRuler);
   centerRulerAtIndex(apertureRuler, selectedApertureIndex, false);
-  updateShutterRuler(smoothedEV, false);
+  updateShutterRuler(lockedEV, false);
 }
 
 function setRulerSidePadding(rulerEl) {
@@ -289,13 +297,17 @@ function updateZoneOverlay(zoneStops) {
     const row = Number(node.dataset.row);
     const col = Number(node.dataset.col);
     const value = zoneStops[row][col];
+    const absValue = Math.abs(value);
 
     node.textContent = `${value >= 0 ? "+" : ""}${value.toFixed(1)}`;
+    node.style.fontSize = `${clamp(11 + absValue * 2.4, 11, 18)}px`;
 
-    node.classList.remove("zone-positive", "zone-negative", "zone-neutral");
-    if (Math.abs(value) <= NEAR_ZERO_THRESHOLD) node.classList.add("zone-neutral");
-    else if (value > 0) node.classList.add("zone-positive");
-    else node.classList.add("zone-negative");
+    node.classList.remove("zone-positive-low", "zone-positive-high", "zone-negative-low", "zone-negative-high", "zone-neutral");
+    if (absValue <= NEAR_ZERO_THRESHOLD) node.classList.add("zone-neutral");
+    else if (value > 0 && absValue < 1.5) node.classList.add("zone-positive-low");
+    else if (value > 0) node.classList.add("zone-positive-high");
+    else if (absValue < 1.5) node.classList.add("zone-negative-low");
+    else node.classList.add("zone-negative-high");
   });
 
   paintReferenceCell();

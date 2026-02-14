@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Film Light Meter (Horizontal Bars)</title>
-    <link rel="stylesheet" href="styles-bar.css?v=1.8.0" />
+    <link rel="stylesheet" href="styles-bar.css?v=1.9.0" />
   </head>
   <body>
     <main class="app">
@@ -21,7 +21,7 @@
         <button id="startBtn" class="start-btn">Start Camera</button>
       </section>
 
-      <p class="hint">Tap anywhere to meter that exact point (small local patch around marker). Zone numbers are f-stops relative to this point.</p>
+      <p class="hint">Tap a point to lock exposure values there. Tap again anywhere to update the lock.</p>
 
       <section class="bottom-panel">
         <div class="iso-row">
@@ -29,16 +29,14 @@
           <select id="isoSelect"></select>
         </div>
 
-        <div class="bar-block">
-          <h2>Aperture (manual)</h2>
+        <div class="bar-block no-gap">
           <div class="ruler-wrap">
             <div class="ruler-center-line" aria-hidden="true"></div>
             <div id="apertureRuler" class="exposure-ruler"></div>
           </div>
         </div>
 
-        <div class="bar-block">
-          <h2>Shutter (auto from light)</h2>
+        <div class="bar-block no-gap">
           <div class="ruler-wrap">
             <div class="ruler-center-line" aria-hidden="true"></div>
             <div id="shutterRuler" class="exposure-ruler"></div>
@@ -47,6 +45,6 @@
       </section>
     </main>
 
-    <script src="app-bar.js?v=1.8.0"></script>
+    <script src="app-bar.js?v=1.9.0"></script>
   </body>
 </html>
