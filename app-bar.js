@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.3.0";
+const APP_VERSION = "2.3.1";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -396,13 +396,20 @@ function updateZoneOverlay(zoneStops) {
   zoneOverlay.querySelectorAll(".zone-hotspot").forEach((box) => {
     const row = Number(box.dataset.row);
     const col = Number(box.dataset.col);
-    const absValue = Math.abs(zoneStops[row][col]);
+    const value = zoneStops[row][col];
+    const absValue = Math.abs(value);
 
-    box.classList.remove("zone-hotspot-warn", "zone-hotspot-critical");
+    box.classList.remove(
+      "zone-hotspot-warn",
+      "zone-hotspot-critical",
+      "zone-hotspot-warn-positive",
+      "zone-hotspot-critical-positive"
+    );
+
     if (absValue >= EXTREME_CRITICAL_STOPS) {
-      box.classList.add("zone-hotspot-critical");
+      box.classList.add(value >= 0 ? "zone-hotspot-critical-positive" : "zone-hotspot-critical");
     } else if (absValue >= EXTREME_WARN_STOPS) {
-      box.classList.add("zone-hotspot-warn");
+      box.classList.add(value >= 0 ? "zone-hotspot-warn-positive" : "zone-hotspot-warn");
     }
   });
 
