@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.3.1";
+const APP_VERSION = "2.3.2";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -62,8 +62,8 @@ let smoothedEV = 10;
 let smoothedRefLuma = null;
 let lockedEV = 10;
 let needsMeterLock = true;
-let selectedApertureIndex = 15;
-let selectedShutterIndex = 18;
+let selectedApertureIndex = findClosestExposureIndex(APERTURE_RULER_VALUES, 5.6);
+let selectedShutterIndex = findClosestExposureIndex(RULER_SHUTTERS, 1 / 125);
 let activeExposureAxis = "aperture";
 let isApertureAutoScrolling = false;
 let isShutterAutoScrolling = false;
@@ -261,7 +261,7 @@ function syncRulersFromActiveAxis(smoothScroll) {
 function updateShutterRulerFromAperture(ev100, smoothScroll) {
   const selectedAperture = APERTURE_RULER_VALUES[selectedApertureIndex];
   const requiredShutter = shutterSeconds(ev100, selectedISO, selectedAperture);
-  selectedShutterIndex = findClosestIndex(RULER_SHUTTERS, requiredShutter);
+  selectedShutterIndex = findClosestExposureIndex(RULER_SHUTTERS, requiredShutter);
 
   centerRulerAtIndex(shutterRuler, selectedShutterIndex, smoothScroll);
   highlightSelectedRulerIndex(shutterRuler, selectedShutterIndex);
@@ -270,7 +270,7 @@ function updateShutterRulerFromAperture(ev100, smoothScroll) {
 function updateApertureRulerFromShutter(ev100, smoothScroll) {
   const selectedShutter = RULER_SHUTTERS[selectedShutterIndex];
   const requiredAperture = apertureFor(ev100, selectedISO, selectedShutter);
-  selectedApertureIndex = findClosestIndex(APERTURE_RULER_VALUES, requiredAperture);
+  selectedApertureIndex = findClosestExposureIndex(APERTURE_RULER_VALUES, requiredAperture);
 
   centerRulerAtIndex(apertureRuler, selectedApertureIndex, smoothScroll);
   highlightSelectedRulerIndex(apertureRuler, selectedApertureIndex);
@@ -351,16 +351,21 @@ function highlightSelectedRulerIndex(rulerEl, selectedIndex) {
   });
 }
 
-function findClosestIndex(values, target) {
+function findClosestExposureIndex(values, target) {
   let bestIdx = 0;
   let bestDelta = Number.POSITIVE_INFINITY;
+
   for (let i = 0; i < values.length; i += 1) {
-    const delta = Math.abs(values[i] - target);
-    if (delta < bestDelta) {
-      bestDelta = delta;
+    const value = values[i];
+    if (value <= 0 || target <= 0) continue;
+
+    const deltaStops = Math.abs(Math.log2(value / target));
+    if (deltaStops < bestDelta) {
+      bestDelta = deltaStops;
       bestIdx = i;
     }
   }
+
   return bestIdx;
 }
 
