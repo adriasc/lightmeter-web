@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.2.0";
+const APP_VERSION = "2.3.0";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -32,6 +32,11 @@ const ZONE_PATCH_RATIO = 0.06;
 const ZONE_PATCH_STEP_PX = 1;
 const RULER_COL_WIDTH = 66;
 const RULER_GAP = 8;
+
+const LABEL_STAGGER_CELL_FRACTION = 0.22;
+const EXTREME_WARN_STOPS = 3.0;
+const EXTREME_CRITICAL_STOPS = 6.0;
+const NIGHT_EV_THRESHOLD = 7.0;
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("meterCanvas");
@@ -70,7 +75,7 @@ function init() {
   if (hintBanner) {
     window.setTimeout(() => {
       hintBanner.classList.add("is-hidden");
-    }, 3500);
+    }, 4500);
   }
 
   ISO_VALUES.forEach((iso) => {
@@ -360,6 +365,8 @@ function findClosestIndex(values, target) {
 }
 
 function updateZoneOverlay(zoneStops) {
+  const readableBoost = clamp((NIGHT_EV_THRESHOLD - smoothedEV) / NIGHT_EV_THRESHOLD, 0, 1);
+
   zoneOverlay.querySelectorAll(".zone-cell").forEach((node) => {
     const row = Number(node.dataset.row);
     const col = Number(node.dataset.col);
@@ -367,14 +374,36 @@ function updateZoneOverlay(zoneStops) {
     const absValue = Math.abs(value);
 
     node.textContent = `${value >= 0 ? "+" : ""}${value.toFixed(1)}`;
-    node.style.fontSize = `${clamp(8 + absValue * 1.2, 8, 11)}px`;
 
-    node.classList.remove("zone-positive-low", "zone-positive-high", "zone-negative-low", "zone-negative-high", "zone-neutral");
+    const fontSize = clamp(8.8 + absValue * 1.2 + readableBoost * 2.8, 9, 14);
+    const padX = 3.0 + readableBoost * 1.8;
+    const padY = 1.0 + readableBoost * 0.9;
+    node.style.fontSize = `${fontSize}px`;
+    node.style.padding = `${padY.toFixed(1)}px ${padX.toFixed(1)}px`;
+
+    node.classList.remove("zone-positive-low", "zone-positive-high", "zone-negative-low", "zone-negative-high", "zone-neutral", "zone-low-light");
     if (absValue <= NEAR_ZERO_THRESHOLD) node.classList.add("zone-neutral");
     else if (value > 0 && absValue < 1.5) node.classList.add("zone-positive-low");
     else if (value > 0) node.classList.add("zone-positive-high");
     else if (absValue < 1.5) node.classList.add("zone-negative-low");
     else node.classList.add("zone-negative-high");
+
+    if (readableBoost >= 0.35) {
+      node.classList.add("zone-low-light");
+    }
+  });
+
+  zoneOverlay.querySelectorAll(".zone-hotspot").forEach((box) => {
+    const row = Number(box.dataset.row);
+    const col = Number(box.dataset.col);
+    const absValue = Math.abs(zoneStops[row][col]);
+
+    box.classList.remove("zone-hotspot-warn", "zone-hotspot-critical");
+    if (absValue >= EXTREME_CRITICAL_STOPS) {
+      box.classList.add("zone-hotspot-critical");
+    } else if (absValue >= EXTREME_WARN_STOPS) {
+      box.classList.add("zone-hotspot-warn");
+    }
   });
 
   paintReferenceCell();
@@ -387,16 +416,38 @@ function createZoneCells() {
 
   for (let row = 0; row < GRID_ROWS; row += 1) {
     for (let col = 0; col < GRID_COLS; col += 1) {
+      const center = cellCenter(row, col);
+      const labelCenter = displayCellLabelCenter(row, col);
+
+      const hotspot = document.createElement("div");
+      hotspot.className = "zone-hotspot";
+      hotspot.dataset.row = String(row);
+      hotspot.dataset.col = String(col);
+      hotspot.style.left = `${center.x * 100}%`;
+      hotspot.style.top = `${center.y * 100}%`;
+      hotspot.style.width = `${100 / GRID_COLS}%`;
+      hotspot.style.height = `${100 / GRID_ROWS}%`;
+      zoneOverlay.appendChild(hotspot);
+
       const cell = document.createElement("div");
       cell.className = "zone-cell";
       cell.dataset.row = String(row);
       cell.dataset.col = String(col);
-      cell.style.left = `${((col + 0.5) / GRID_COLS) * 100}%`;
-      cell.style.top = `${((row + 0.5) / GRID_ROWS) * 100}%`;
+      cell.style.left = `${labelCenter.x * 100}%`;
+      cell.style.top = `${labelCenter.y * 100}%`;
       cell.textContent = "+0.0";
       zoneOverlay.appendChild(cell);
     }
   }
+}
+
+function displayCellLabelCenter(row, col) {
+  const offset = col % 2 === 0 ? -LABEL_STAGGER_CELL_FRACTION : LABEL_STAGGER_CELL_FRACTION;
+  const y = clamp((row + 0.5 + offset) / GRID_ROWS, 0.02, 0.98);
+  return {
+    x: (col + 0.5) / GRID_COLS,
+    y
+  };
 }
 
 function sampleLumaPatch(imageData, w, h, cx, cy, radius, step) {
