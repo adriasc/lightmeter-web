@@ -1,30 +1,35 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "1.4.0";
-const APERTURES = [1.4, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0];
-const SHUTTERS = [
-  1 / 2000,
-  1 / 1000,
-  1 / 500,
-  1 / 250,
-  1 / 125,
-  1 / 60,
-  1 / 30,
-  1 / 15,
-  1 / 8,
-  1 / 4,
-  1 / 2,
-  1
+const APP_VERSION = "1.5.0";
+
+const TABLE_APERTURES = [1.4, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0];
+const TABLE_SHUTTERS = [1 / 2000, 1 / 1000, 1 / 500, 1 / 250, 1 / 125, 1 / 60, 1 / 30, 1 / 15, 1 / 8, 1 / 4, 1 / 2, 1.0];
+
+const APERTURE_STOPS = [
+  1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
+  2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
+  4.0, 4.5, 5.0, 5.6, 6.3, 7.1,
+  8.0, 9.0, 10.0, 11.0, 13.0, 14.0,
+  16.0, 18.0, 20.0, 22.0
+];
+const SHUTTER_STOPS = [
+  1 / 8000, 1 / 6400, 1 / 5000, 1 / 4000, 1 / 3200, 1 / 2500, 1 / 2000, 1 / 1600,
+  1 / 1250, 1 / 1000, 1 / 800, 1 / 640, 1 / 500, 1 / 400, 1 / 320, 1 / 250,
+  1 / 200, 1 / 160, 1 / 125, 1 / 100, 1 / 80, 1 / 60, 1 / 50, 1 / 40,
+  1 / 30, 1 / 25, 1 / 20, 1 / 15, 1 / 13, 1 / 10, 1 / 8, 1 / 6,
+  1 / 5, 1 / 4, 0.3, 0.4, 0.5, 0.6, 0.8,
+  1.0, 1.3, 1.6, 2.0, 2.5, 3.2, 4.0, 5.0, 6.0,
+  8.0, 10.0, 13.0, 15.0, 20.0, 25.0, 30.0
 ];
 
-const GRID_ROWS = 5;
-const GRID_COLS = 7;
+const GRID_ROWS = 10;
+const GRID_COLS = 14;
 const EV_CALIBRATION_OFFSET = 4.5;
 
 const UPDATE_INTERVAL_MS = 220;
 const GRID_SMOOTHING = 0.34;
 const EV_SMOOTHING = 0.25;
 const NEAR_ZERO_THRESHOLD = 0.2;
-const ZONE_PATCH_RATIO = 0.09;
+const ZONE_PATCH_RATIO = 0.06;
 const ZONE_PATCH_STEP_PX = 1;
 
 const video = document.getElementById("video");
@@ -38,6 +43,11 @@ const isoSelect = document.getElementById("isoSelect");
 const shutterTable = document.getElementById("shutterTable");
 const apertureTable = document.getElementById("apertureTable");
 const cameraWrap = document.getElementById("cameraWrap");
+const apertureSlider = document.getElementById("apertureSlider");
+const shutterSlider = document.getElementById("shutterSlider");
+const apertureValue = document.getElementById("apertureValue");
+const shutterValue = document.getElementById("shutterValue");
+const linkedMode = document.getElementById("linkedMode");
 
 let selectedISO = 400;
 let referenceCell = { row: Math.floor(GRID_ROWS / 2), col: Math.floor(GRID_COLS / 2) };
@@ -47,22 +57,40 @@ let animationFrameId = null;
 let lastMeterTs = 0;
 let smoothedGrid = null;
 let smoothedEV = 10;
+let selectedApertureIndex = findClosestIndex(APERTURE_STOPS, 5.6);
+let selectedShutterIndex = findClosestIndex(SHUTTER_STOPS, 1 / 125);
+let exposureAnchor = "aperture";
 
 init();
 
 function init() {
   if (appVersion) appVersion.textContent = `v${APP_VERSION}`;
   buildISOSelect();
+  setupLinkedControls();
   renderTapMarker();
   renderTables(smoothedEV);
   createZoneCells();
   paintReferenceCell();
+  syncLinkedExposure(smoothedEV);
 
   startBtn.addEventListener("click", startCamera);
   cameraWrap.addEventListener("click", onCameraTap);
   isoSelect.addEventListener("change", () => {
     selectedISO = Number(isoSelect.value);
     renderTables(smoothedEV);
+    syncLinkedExposure(smoothedEV);
+  });
+
+  apertureSlider.addEventListener("input", () => {
+    selectedApertureIndex = clamp(Math.round(Number(apertureSlider.value)), 0, APERTURE_STOPS.length - 1);
+    exposureAnchor = "aperture";
+    syncLinkedExposure(smoothedEV);
+  });
+
+  shutterSlider.addEventListener("input", () => {
+    selectedShutterIndex = clamp(Math.round(Number(shutterSlider.value)), 0, SHUTTER_STOPS.length - 1);
+    exposureAnchor = "shutter";
+    syncLinkedExposure(smoothedEV);
   });
 }
 
@@ -74,6 +102,13 @@ function buildISOSelect() {
     if (iso === selectedISO) option.selected = true;
     isoSelect.appendChild(option);
   });
+}
+
+function setupLinkedControls() {
+  apertureSlider.max = String(APERTURE_STOPS.length - 1);
+  shutterSlider.max = String(SHUTTER_STOPS.length - 1);
+  apertureSlider.value = String(selectedApertureIndex);
+  shutterSlider.value = String(selectedShutterIndex);
 }
 
 async function startCamera() {
@@ -93,7 +128,7 @@ async function startCamera() {
     video.srcObject = stream;
 
     await video.play();
-    applyApprox28mmZoom(stream);
+    applyWiderFraming(stream);
 
     startBtn.style.display = "none";
     loopMetering();
@@ -104,15 +139,16 @@ async function startCamera() {
   }
 }
 
-async function applyApprox28mmZoom(stream) {
+async function applyWiderFraming(stream) {
   const [track] = stream.getVideoTracks();
   if (!track) return;
 
   const caps = track.getCapabilities ? track.getCapabilities() : null;
   if (!caps || typeof caps.zoom !== "object") return;
 
-  const targetZoom = 1.15;
-  const zoom = clamp(targetZoom, caps.zoom.min ?? 1, caps.zoom.max ?? targetZoom);
+  const minZoom = caps.zoom.min ?? 1;
+  const maxZoom = caps.zoom.max ?? 1;
+  const zoom = clamp(minZoom, minZoom, maxZoom);
 
   try {
     await track.applyConstraints({ advanced: [{ zoom }] });
@@ -175,7 +211,7 @@ function meterFrame() {
   const rawGrid = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(1e-4));
   const cellW = w / GRID_COLS;
   const cellH = h / GRID_ROWS;
-  const zonePatchRadius = Math.max(3, Math.floor(Math.min(cellW, cellH) * ZONE_PATCH_RATIO));
+  const zonePatchRadius = Math.max(2, Math.floor(Math.min(cellW, cellH) * ZONE_PATCH_RATIO));
 
   for (let row = 0; row < GRID_ROWS; row += 1) {
     for (let col = 0; col < GRID_COLS; col += 1) {
@@ -196,6 +232,26 @@ function meterFrame() {
 
   evReadout.textContent = smoothedEV.toFixed(1);
   renderTables(smoothedEV);
+  syncLinkedExposure(smoothedEV);
+}
+
+function syncLinkedExposure(ev100) {
+  if (exposureAnchor === "shutter") {
+    const chosenShutter = SHUTTER_STOPS[selectedShutterIndex];
+    const matchingAperture = apertureFor(ev100, selectedISO, chosenShutter);
+    selectedApertureIndex = findClosestIndex(APERTURE_STOPS, matchingAperture);
+  } else {
+    const chosenAperture = APERTURE_STOPS[selectedApertureIndex];
+    const matchingShutter = shutterSeconds(ev100, selectedISO, chosenAperture);
+    selectedShutterIndex = findClosestIndex(SHUTTER_STOPS, matchingShutter);
+  }
+
+  apertureSlider.value = String(selectedApertureIndex);
+  shutterSlider.value = String(selectedShutterIndex);
+
+  apertureValue.textContent = `f/${APERTURE_STOPS[selectedApertureIndex].toFixed(1)}`;
+  shutterValue.textContent = formatShutter(SHUTTER_STOPS[selectedShutterIndex]);
+  linkedMode.textContent = exposureAnchor === "shutter" ? "Shutter priority" : "Aperture priority";
 }
 
 function estimateEV100(normalizedLuma) {
@@ -203,12 +259,12 @@ function estimateEV100(normalizedLuma) {
 }
 
 function renderTables(ev100) {
-  shutterTable.innerHTML = APERTURES.map((ap) => {
+  shutterTable.innerHTML = TABLE_APERTURES.map((ap) => {
     const shutter = shutterSeconds(ev100, selectedISO, ap);
     return `<tr><td>f/${ap.toFixed(1)}</td><td>${formatShutter(shutter)}</td></tr>`;
   }).join("");
 
-  apertureTable.innerHTML = SHUTTERS.map((sh) => {
+  apertureTable.innerHTML = TABLE_SHUTTERS.map((sh) => {
     const ap = apertureFor(ev100, selectedISO, sh);
     return `<tr><td>${formatShutter(sh)}</td><td>f/${ap.toFixed(1)}</td></tr>`;
   }).join("");
@@ -224,11 +280,14 @@ function apertureFor(ev100, iso, shutter) {
 
 function formatShutter(seconds) {
   if (seconds >= 1) return `${seconds.toFixed(1)}s`;
+  if (seconds >= 0.3) return `${seconds.toFixed(1)}s`;
   return `1/${Math.round(1 / seconds)}`;
 }
 
 function createZoneCells() {
   zoneOverlay.innerHTML = "";
+  zoneOverlay.style.setProperty("--grid-rows", String(GRID_ROWS));
+  zoneOverlay.style.setProperty("--grid-cols", String(GRID_COLS));
 
   for (let row = 0; row < GRID_ROWS; row += 1) {
     for (let col = 0; col < GRID_COLS; col += 1) {
@@ -321,6 +380,19 @@ function cellCenter(row, col) {
     x: (col + 0.5) / GRID_COLS,
     y: (row + 0.5) / GRID_ROWS
   };
+}
+
+function findClosestIndex(values, target) {
+  let bestIdx = 0;
+  let bestDelta = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < values.length; i += 1) {
+    const delta = Math.abs(values[i] - target);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
 }
 
 function clamp(value, min, max) {

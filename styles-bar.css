@@ -74,19 +74,34 @@ video,
 }
 
 .zone-overlay {
+  --grid-rows: 10;
+  --grid-cols: 14;
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+
+.zone-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.14) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.14) 1px, transparent 1px);
+  background-size:
+    calc(100% / var(--grid-cols)) 100%,
+    100% calc(100% / var(--grid-rows));
+  opacity: 0.26;
 }
 
 .zone-cell {
   position: absolute;
   transform: translate(-50%, -50%);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 800;
-  padding: 2px 5px;
-  border-radius: 10px;
+  padding: 1px 3px;
+  border-radius: 8px;
   background: rgba(7, 10, 15, 0.64);
   color: #fff;
   border: 1px solid rgba(188, 205, 230, 0.2);
@@ -122,13 +137,34 @@ video,
 
 .tap-marker {
   position: absolute;
-  width: 18px;
-  height: 18px;
+  width: 26px;
+  height: 26px;
   border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.95);
-  box-shadow: 0 0 0 120px rgba(255, 255, 255, 0.04);
+  background: radial-gradient(circle, #ffd34a 0 2px, transparent 3px);
+  box-shadow: 0 0 0 120px rgba(255, 255, 255, 0.03);
   transform: translate(-50%, -50%);
   pointer-events: none;
+}
+
+.tap-marker::before,
+.tap-marker::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  transform: translate(-50%, -50%);
+}
+
+.tap-marker::before {
+  width: 1px;
+  height: 32px;
+}
+
+.tap-marker::after {
+  width: 32px;
+  height: 1px;
 }
 
 .start-btn {
@@ -235,7 +271,7 @@ select {
 }
 
 .ruler-col {
-  min-width: 70px;
+  min-width: 66px;
   text-align: center;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: #d8e0ec;

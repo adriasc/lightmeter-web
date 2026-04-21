@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Film Light Meter (Web)</title>
-    <link rel="stylesheet" href="styles.css?v=1.4.0" />
+    <link rel="stylesheet" href="styles.css?v=1.5.0" />
   </head>
   <body>
     <main class="app">
@@ -27,6 +27,25 @@
       <section class="controls">
         <label for="isoSelect">Film ISO</label>
         <select id="isoSelect"></select>
+      </section>
+
+      <section class="controls linked-controls">
+        <div class="linked-head">
+          <strong>Linked Exposure</strong>
+          <span id="linkedMode">Aperture priority</span>
+        </div>
+
+        <label class="linked-row" for="apertureSlider">
+          <span>Aperture</span>
+          <span id="apertureValue">f/--</span>
+        </label>
+        <input id="apertureSlider" type="range" min="0" max="0" step="1" value="0" />
+
+        <label class="linked-row" for="shutterSlider">
+          <span>Shutter</span>
+          <span id="shutterValue">--</span>
+        </label>
+        <input id="shutterSlider" type="range" min="0" max="0" step="1" value="0" />
       </section>
 
       <section class="tables">
@@ -58,6 +77,6 @@
       </section>
     </main>
 
-    <script src="app.js?v=1.4.0"></script>
+    <script src="app.js?v=1.5.0"></script>
   </body>
 </html>

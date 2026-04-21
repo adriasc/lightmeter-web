@@ -1,17 +1,24 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.1.0";
+const APP_VERSION = "2.2.0";
 const APERTURE_RULER_VALUES = [
-  1.4, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0, 22.0, 32.0
+  1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
+  2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
+  4.0, 4.5, 5.0, 5.6, 6.3, 7.1,
+  8.0, 9.0, 10.0, 11.0, 13.0, 14.0,
+  16.0, 18.0, 20.0, 22.0
 ];
 const RULER_SHUTTERS = [
-  1 / 8000, 1 / 6400, 1 / 5000, 1 / 4000, 1 / 3200, 1 / 2500, 1 / 2000, 1 / 1600, 1 / 1250, 1 / 1000,
-  1 / 800, 1 / 640, 1 / 500, 1 / 400, 1 / 320, 1 / 250, 1 / 200, 1 / 160, 1 / 125, 1 / 100, 1 / 80,
-  1 / 60, 1 / 50, 1 / 40, 1 / 30, 1 / 25, 1 / 20, 1 / 15, 1 / 13, 1 / 10, 1 / 8, 1 / 6, 1 / 5, 1 / 4,
-  1 / 3, 1 / 2.5, 1 / 2, 1 / 1.6, 1 / 1.3, 1
+  1 / 8000, 1 / 6400, 1 / 5000, 1 / 4000, 1 / 3200, 1 / 2500, 1 / 2000, 1 / 1600,
+  1 / 1250, 1 / 1000, 1 / 800, 1 / 640, 1 / 500, 1 / 400, 1 / 320, 1 / 250,
+  1 / 200, 1 / 160, 1 / 125, 1 / 100, 1 / 80, 1 / 60, 1 / 50, 1 / 40,
+  1 / 30, 1 / 25, 1 / 20, 1 / 15, 1 / 13, 1 / 10, 1 / 8, 1 / 6,
+  1 / 5, 1 / 4, 0.3, 0.4, 0.5, 0.6, 0.8,
+  1.0, 1.3, 1.6, 2.0, 2.5, 3.2, 4.0, 5.0, 6.0,
+  8.0, 10.0, 13.0, 15.0, 20.0, 25.0, 30.0
 ];
 
-const GRID_ROWS = 5;
-const GRID_COLS = 7;
+const GRID_ROWS = 10;
+const GRID_COLS = 14;
 const EV_CALIBRATION_OFFSET = 4.5;
 
 const UPDATE_INTERVAL_MS = 220;
@@ -21,9 +28,9 @@ const NEAR_ZERO_THRESHOLD = 0.2;
 const STOP_EXPANSION_FACTOR = 1.8;
 const REF_PATCH_RADIUS_PX = 8;
 const REF_PATCH_STEP_PX = 1;
-const ZONE_PATCH_RATIO = 0.09;
+const ZONE_PATCH_RATIO = 0.06;
 const ZONE_PATCH_STEP_PX = 1;
-const RULER_COL_WIDTH = 70;
+const RULER_COL_WIDTH = 66;
 const RULER_GAP = 8;
 
 const video = document.getElementById("video");
@@ -50,8 +57,11 @@ let smoothedEV = 10;
 let smoothedRefLuma = null;
 let lockedEV = 10;
 let needsMeterLock = true;
-let selectedApertureIndex = 3;
+let selectedApertureIndex = 15;
+let selectedShutterIndex = 18;
+let activeExposureAxis = "aperture";
 let isApertureAutoScrolling = false;
+let isShutterAutoScrolling = false;
 
 init();
 
@@ -62,6 +72,7 @@ function init() {
       hintBanner.classList.add("is-hidden");
     }, 3500);
   }
+
   ISO_VALUES.forEach((iso) => {
     const option = document.createElement("option");
     option.value = String(iso);
@@ -74,20 +85,25 @@ function init() {
   createZoneCells();
   paintReferenceCell();
   buildRulers();
+
   setRulerSidePadding(apertureRuler);
   setRulerSidePadding(shutterRuler);
   centerRulerAtIndex(apertureRuler, selectedApertureIndex, false);
+  centerRulerAtIndex(shutterRuler, selectedShutterIndex, false);
   highlightSelectedRulerIndex(apertureRuler, selectedApertureIndex);
+  highlightSelectedRulerIndex(shutterRuler, selectedShutterIndex);
+
   evReadout.textContent = lockedEV.toFixed(1);
-  updateShutterRuler(lockedEV, false);
+  syncRulersFromActiveAxis(false);
 
   startBtn.addEventListener("click", startCamera);
   cameraWrap.addEventListener("click", onCameraTap);
   isoSelect.addEventListener("change", () => {
     selectedISO = Number(isoSelect.value);
-    updateShutterRuler(lockedEV, true);
+    syncRulersFromActiveAxis(true);
   });
   apertureRuler.addEventListener("scroll", onApertureRulerScroll, { passive: true });
+  shutterRuler.addEventListener("scroll", onShutterRulerScroll, { passive: true });
   window.addEventListener("resize", onResize);
 }
 
@@ -107,7 +123,7 @@ async function startCamera() {
 
     video.srcObject = stream;
     await video.play();
-    applyApprox28mmZoom(stream);
+    applyWiderFraming(stream);
 
     startBtn.style.display = "none";
     loopMetering();
@@ -117,14 +133,17 @@ async function startCamera() {
   }
 }
 
-async function applyApprox28mmZoom(stream) {
+async function applyWiderFraming(stream) {
   const [track] = stream.getVideoTracks();
   if (!track) return;
 
   const caps = track.getCapabilities ? track.getCapabilities() : null;
   if (!caps || typeof caps.zoom !== "object") return;
 
-  const zoom = clamp(1.15, caps.zoom.min ?? 1, caps.zoom.max ?? 1.15);
+  const minZoom = caps.zoom.min ?? 1;
+  const maxZoom = caps.zoom.max ?? 1;
+  const zoom = clamp(minZoom, minZoom, maxZoom);
+
   try {
     await track.applyConstraints({ advanced: [{ zoom }] });
   } catch {
@@ -184,7 +203,7 @@ function meterFrame() {
   const rawGrid = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(1e-4));
   const cellW = w / GRID_COLS;
   const cellH = h / GRID_ROWS;
-  const zonePatchRadius = Math.max(3, Math.floor(Math.min(cellW, cellH) * ZONE_PATCH_RATIO));
+  const zonePatchRadius = Math.max(2, Math.floor(Math.min(cellW, cellH) * ZONE_PATCH_RATIO));
 
   for (let row = 0; row < GRID_ROWS; row += 1) {
     for (let col = 0; col < GRID_COLS; col += 1) {
@@ -212,7 +231,7 @@ function meterFrame() {
     lockedEV = smoothedEV;
     needsMeterLock = false;
     evReadout.textContent = lockedEV.toFixed(1);
-    updateShutterRuler(lockedEV, true);
+    syncRulersFromActiveAxis(true);
   }
 }
 
@@ -226,13 +245,30 @@ function buildRulers() {
   }).join("");
 }
 
-function updateShutterRuler(ev100, smoothScroll) {
+function syncRulersFromActiveAxis(smoothScroll) {
+  if (activeExposureAxis === "shutter") {
+    updateApertureRulerFromShutter(lockedEV, smoothScroll);
+  } else {
+    updateShutterRulerFromAperture(lockedEV, smoothScroll);
+  }
+}
+
+function updateShutterRulerFromAperture(ev100, smoothScroll) {
   const selectedAperture = APERTURE_RULER_VALUES[selectedApertureIndex];
   const requiredShutter = shutterSeconds(ev100, selectedISO, selectedAperture);
-  const shutterIndex = findClosestIndex(RULER_SHUTTERS, requiredShutter);
+  selectedShutterIndex = findClosestIndex(RULER_SHUTTERS, requiredShutter);
 
-  centerRulerAtIndex(shutterRuler, shutterIndex, smoothScroll);
-  highlightSelectedRulerIndex(shutterRuler, shutterIndex);
+  centerRulerAtIndex(shutterRuler, selectedShutterIndex, smoothScroll);
+  highlightSelectedRulerIndex(shutterRuler, selectedShutterIndex);
+}
+
+function updateApertureRulerFromShutter(ev100, smoothScroll) {
+  const selectedShutter = RULER_SHUTTERS[selectedShutterIndex];
+  const requiredAperture = apertureFor(ev100, selectedISO, selectedShutter);
+  selectedApertureIndex = findClosestIndex(APERTURE_RULER_VALUES, requiredAperture);
+
+  centerRulerAtIndex(apertureRuler, selectedApertureIndex, smoothScroll);
+  highlightSelectedRulerIndex(apertureRuler, selectedApertureIndex);
 }
 
 function onApertureRulerScroll() {
@@ -241,8 +277,21 @@ function onApertureRulerScroll() {
   const index = getCenteredRulerIndex(apertureRuler, APERTURE_RULER_VALUES.length);
   if (index !== selectedApertureIndex) {
     selectedApertureIndex = index;
+    activeExposureAxis = "aperture";
     highlightSelectedRulerIndex(apertureRuler, selectedApertureIndex);
-    updateShutterRuler(lockedEV, true);
+    updateShutterRulerFromAperture(lockedEV, true);
+  }
+}
+
+function onShutterRulerScroll() {
+  if (isShutterAutoScrolling) return;
+
+  const index = getCenteredRulerIndex(shutterRuler, RULER_SHUTTERS.length);
+  if (index !== selectedShutterIndex) {
+    selectedShutterIndex = index;
+    activeExposureAxis = "shutter";
+    highlightSelectedRulerIndex(shutterRuler, selectedShutterIndex);
+    updateApertureRulerFromShutter(lockedEV, true);
   }
 }
 
@@ -250,7 +299,8 @@ function onResize() {
   setRulerSidePadding(apertureRuler);
   setRulerSidePadding(shutterRuler);
   centerRulerAtIndex(apertureRuler, selectedApertureIndex, false);
-  updateShutterRuler(lockedEV, false);
+  centerRulerAtIndex(shutterRuler, selectedShutterIndex, false);
+  syncRulersFromActiveAxis(false);
 }
 
 function setRulerSidePadding(rulerEl) {
@@ -268,9 +318,19 @@ function centerRulerAtIndex(rulerEl, index, smoothScroll) {
     window.setTimeout(() => {
       isApertureAutoScrolling = false;
     }, smoothScroll ? 220 : 0);
-  } else {
-    rulerEl.scrollTo({ left: target, behavior: smoothScroll ? "smooth" : "auto" });
+    return;
   }
+
+  if (rulerEl === shutterRuler) {
+    isShutterAutoScrolling = true;
+    rulerEl.scrollTo({ left: target, behavior: smoothScroll ? "smooth" : "auto" });
+    window.setTimeout(() => {
+      isShutterAutoScrolling = false;
+    }, smoothScroll ? 220 : 0);
+    return;
+  }
+
+  rulerEl.scrollTo({ left: target, behavior: smoothScroll ? "smooth" : "auto" });
 }
 
 function getCenteredRulerIndex(rulerEl, totalCount) {
@@ -307,7 +367,7 @@ function updateZoneOverlay(zoneStops) {
     const absValue = Math.abs(value);
 
     node.textContent = `${value >= 0 ? "+" : ""}${value.toFixed(1)}`;
-    node.style.fontSize = `${clamp(11 + absValue * 2.4, 11, 18)}px`;
+    node.style.fontSize = `${clamp(8 + absValue * 1.2, 8, 11)}px`;
 
     node.classList.remove("zone-positive-low", "zone-positive-high", "zone-negative-low", "zone-negative-high", "zone-neutral");
     if (absValue <= NEAR_ZERO_THRESHOLD) node.classList.add("zone-neutral");
@@ -322,6 +382,9 @@ function updateZoneOverlay(zoneStops) {
 
 function createZoneCells() {
   zoneOverlay.innerHTML = "";
+  zoneOverlay.style.setProperty("--grid-rows", String(GRID_ROWS));
+  zoneOverlay.style.setProperty("--grid-cols", String(GRID_COLS));
+
   for (let row = 0; row < GRID_ROWS; row += 1) {
     for (let col = 0; col < GRID_COLS; col += 1) {
       const cell = document.createElement("div");
@@ -382,6 +445,7 @@ function apertureFor(ev100, iso, shutter) {
 
 function formatShutter(seconds) {
   if (seconds >= 1) return `${seconds.toFixed(1)}s`;
+  if (seconds >= 0.3) return `${seconds.toFixed(1)}s`;
   return `1/${Math.round(1 / seconds)}`;
 }
 
