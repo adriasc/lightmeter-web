@@ -4,13 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Film Light Meter (Horizontal Bars)</title>
-    <link rel="stylesheet" href="styles-bar.css?v=2.3.2" />
+    <link rel="stylesheet" href="styles-bar.css?v=2.5.0" />
   </head>
   <body>
     <main class="app">
       <header class="topbar glass">
         <h1>Film Light Meter</h1>
-        <div class="ev-readout">EV100 <span id="evReadout">--.-</span> | <span id="appVersion">v---</span></div>
+        <div class="topbar-right">
+          <div class="ev-readout">EV100 <span id="evReadout">--.-</span> | <span id="appVersion">v---</span></div>
+          <div class="mode-switch" role="group" aria-label="Metering mode">
+            <button id="modeSimpleBtn" class="mode-btn is-active" type="button" aria-pressed="true">Simple</button>
+            <button id="modeProBtn" class="mode-btn" type="button" aria-pressed="false">Pro</button>
+          </div>
+        </div>
       </header>
 
       <section class="camera-wrap" id="cameraWrap">
@@ -18,10 +24,11 @@
         <canvas id="meterCanvas"></canvas>
         <div id="zoneOverlay" class="zone-overlay"></div>
         <div id="tapMarker" class="tap-marker" aria-hidden="true"></div>
+        <div id="avgMarker" class="avg-marker" aria-hidden="true"></div>
         <button id="startBtn" class="start-btn">Start Camera</button>
       </section>
 
-      <p id="hintBanner" class="hint glass">Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame. Blue square = positive extreme, red square = negative extreme. Darker color from |zone| >= 6.</p>
+      <p id="hintBanner" class="hint glass">Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame.</p>
 
       <section class="bottom-panel glass">
         <div class="iso-row">
@@ -45,6 +52,6 @@
       </section>
     </main>
 
-    <script src="app-bar.js?v=2.3.2"></script>
+    <script src="app-bar.js?v=2.5.0"></script>
   </body>
 </html>

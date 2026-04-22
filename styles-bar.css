@@ -41,6 +41,12 @@ body {
   border-bottom: 1px solid rgba(89, 113, 143, 0.28);
 }
 
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 h1 {
   margin: 0;
   font-size: 0.95rem;
@@ -52,6 +58,31 @@ h1 {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   font-size: 0.86rem;
+}
+
+.mode-switch {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(102, 124, 150, 0.45);
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(10, 14, 20, 0.46);
+}
+
+.mode-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 6px 9px;
+}
+
+.mode-btn.is-active {
+  color: #f4f8ff;
+  background: rgba(85, 127, 183, 0.48);
 }
 
 .camera-wrap {
@@ -124,6 +155,11 @@ video,
   border-color: rgba(122, 198, 255, 0.68);
 }
 
+.mode-simple .zone-hotspot,
+.mode-simple .avg-marker {
+  display: none;
+}
+
 
 .zone-cell {
   position: absolute;
@@ -183,6 +219,19 @@ video,
   box-shadow: 0 0 0 120px rgba(255, 255, 255, 0.03);
   transform: translate(-50%, -50%);
   pointer-events: none;
+}
+
+.avg-marker {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 221, 99, 0.98);
+  background: radial-gradient(circle, rgba(255, 238, 150, 1) 0 2px, rgba(255, 214, 66, 0.22) 3px, transparent 4px);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35), 0 0 16px rgba(255, 216, 79, 0.6);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2;
 }
 
 .tap-marker::before,

@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.3.2";
+const APP_VERSION = "2.5.0";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -37,15 +37,23 @@ const LABEL_STAGGER_CELL_FRACTION = 0.22;
 const EXTREME_WARN_STOPS = 3.0;
 const EXTREME_CRITICAL_STOPS = 6.0;
 const NIGHT_EV_THRESHOLD = 7.0;
+const MODE_SIMPLE = "simple";
+const MODE_PRO = "pro";
+const MODE_STORAGE_KEY = "filmLightMeterMode";
+const SIMPLE_MODE_HINT = "Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame.";
+const PRO_MODE_HINT = "Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame. Blue square = positive extreme, red square = negative extreme. Darker color from |zone| >= 6. Small yellow dot = zone closest to the whole-frame average.";
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("meterCanvas");
 const zoneOverlay = document.getElementById("zoneOverlay");
 const tapMarker = document.getElementById("tapMarker");
+const avgMarker = document.getElementById("avgMarker");
 const startBtn = document.getElementById("startBtn");
 const evReadout = document.getElementById("evReadout");
 const appVersion = document.getElementById("appVersion");
 const hintBanner = document.getElementById("hintBanner");
+const modeSimpleBtn = document.getElementById("modeSimpleBtn");
+const modeProBtn = document.getElementById("modeProBtn");
 const isoSelect = document.getElementById("isoSelect");
 const apertureRuler = document.getElementById("apertureRuler");
 const shutterRuler = document.getElementById("shutterRuler");
@@ -54,6 +62,8 @@ const cameraWrap = document.getElementById("cameraWrap");
 let selectedISO = 400;
 let referenceCell = { row: Math.floor(GRID_ROWS / 2), col: Math.floor(GRID_COLS / 2) };
 let referencePoint = cellCenter(referenceCell.row, referenceCell.col);
+let averageCell = { row: Math.floor(GRID_ROWS / 2), col: Math.floor(GRID_COLS / 2) };
+let uiMode = readInitialMode();
 
 let animationFrameId = null;
 let lastMeterTs = 0;
@@ -72,6 +82,8 @@ init();
 
 function init() {
   if (appVersion) appVersion.textContent = `v${APP_VERSION}`;
+  setupModeSwitch();
+  applyUiMode();
   if (hintBanner) {
     window.setTimeout(() => {
       hintBanner.classList.add("is-hidden");
@@ -87,6 +99,7 @@ function init() {
   });
 
   renderTapMarker();
+  renderAverageMarker();
   createZoneCells();
   paintReferenceCell();
   buildRulers();
@@ -110,6 +123,56 @@ function init() {
   apertureRuler.addEventListener("scroll", onApertureRulerScroll, { passive: true });
   shutterRuler.addEventListener("scroll", onShutterRulerScroll, { passive: true });
   window.addEventListener("resize", onResize);
+}
+
+function readInitialMode() {
+  try {
+    const savedMode = localStorage.getItem(MODE_STORAGE_KEY);
+    if (savedMode === MODE_PRO || savedMode === MODE_SIMPLE) return savedMode;
+  } catch {
+    // Ignore storage access issues.
+  }
+  return MODE_SIMPLE;
+}
+
+function setupModeSwitch() {
+  if (!modeSimpleBtn || !modeProBtn) return;
+  modeSimpleBtn.addEventListener("click", () => setUiMode(MODE_SIMPLE));
+  modeProBtn.addEventListener("click", () => setUiMode(MODE_PRO));
+}
+
+function setUiMode(nextMode) {
+  if (nextMode !== MODE_SIMPLE && nextMode !== MODE_PRO) return;
+  if (uiMode === nextMode) return;
+  uiMode = nextMode;
+
+  try {
+    localStorage.setItem(MODE_STORAGE_KEY, uiMode);
+  } catch {
+    // Ignore storage access issues.
+  }
+
+  applyUiMode();
+}
+
+function applyUiMode() {
+  const isPro = uiMode === MODE_PRO;
+  document.body.classList.toggle("mode-pro", isPro);
+  document.body.classList.toggle("mode-simple", !isPro);
+
+  if (modeSimpleBtn) {
+    modeSimpleBtn.classList.toggle("is-active", !isPro);
+    modeSimpleBtn.setAttribute("aria-pressed", String(!isPro));
+  }
+
+  if (modeProBtn) {
+    modeProBtn.classList.toggle("is-active", isPro);
+    modeProBtn.setAttribute("aria-pressed", String(isPro));
+  }
+
+  if (hintBanner) {
+    hintBanner.textContent = isPro ? PRO_MODE_HINT : SIMPLE_MODE_HINT;
+  }
 }
 
 async function startCamera() {
@@ -178,6 +241,45 @@ function renderTapMarker() {
   tapMarker.style.top = `${referencePoint.y * 100}%`;
 }
 
+function renderAverageMarker() {
+  if (!avgMarker) return;
+  const center = cellCenter(averageCell.row, averageCell.col);
+  avgMarker.style.left = `${center.x * 100}%`;
+  avgMarker.style.top = `${center.y * 100}%`;
+}
+
+function updateAverageMarkerFromGrid(grid) {
+  if (!avgMarker || !grid || !grid.length) return;
+
+  let sum = 0;
+  let count = 0;
+  for (let row = 0; row < GRID_ROWS; row += 1) {
+    for (let col = 0; col < GRID_COLS; col += 1) {
+      sum += grid[row][col];
+      count += 1;
+    }
+  }
+
+  const meanLuma = sum / Math.max(count, 1);
+  let bestRow = 0;
+  let bestCol = 0;
+  let bestDelta = Number.POSITIVE_INFINITY;
+
+  for (let row = 0; row < GRID_ROWS; row += 1) {
+    for (let col = 0; col < GRID_COLS; col += 1) {
+      const delta = Math.abs(grid[row][col] - meanLuma);
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        bestRow = row;
+        bestCol = col;
+      }
+    }
+  }
+
+  averageCell = { row: bestRow, col: bestCol };
+  renderAverageMarker();
+}
+
 function loopMetering() {
   if (animationFrameId) cancelAnimationFrame(animationFrameId);
 
@@ -219,6 +321,7 @@ function meterFrame() {
   }
 
   smoothedGrid = smoothGrid(smoothedGrid, rawGrid, GRID_SMOOTHING);
+  updateAverageMarkerFromGrid(smoothedGrid);
   const refPixelX = clamp(Math.round(referencePoint.x * (w - 1)), 0, w - 1);
   const refPixelY = clamp(Math.round(referencePoint.y * (h - 1)), 0, h - 1);
   const rawRefLuma = sampleLumaPatch(data, w, h, refPixelX, refPixelY, REF_PATCH_RADIUS_PX, REF_PATCH_STEP_PX);
