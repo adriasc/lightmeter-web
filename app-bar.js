@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.7.0";
+const APP_VERSION = "2.7.2";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -44,13 +44,15 @@ const FILM_PROFILE_STORAGE_KEY = "filmLightMeterProfile";
 const SHADOW_LATITUDE_STORAGE_KEY = "filmLightMeterShadowLatitude";
 const HIGHLIGHT_LATITUDE_STORAGE_KEY = "filmLightMeterHighlightLatitude";
 const SIMPLE_MODE_HINT = "Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame.";
-const PRO_MODE_HINT = "Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame. Blue/red = far zones, yellow = frame-average zones, black/white = clipped zones for selected film latitude.";
+const PRO_MODE_HINT = "Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame. Blue/red = far zones, yellow = frame-average zones, black/white = super-extreme zones (about +/-8 stops).";
 const AVG_MARKER_MAX_COUNT = 4;
 const AVG_MARKER_MAX_DELTA_STOPS = 0.2;
 const AVG_MARKER_MIN_CELL_GAP = 2;
 const MIN_LATITUDE_STOPS = 0.5;
 const MAX_LATITUDE_STOPS = 12.0;
 const DEFAULT_FILM_PROFILE_ID = "portra800";
+const SUPER_SHADOW_CLIP_STOPS = 8.0;
+const SUPER_HIGHLIGHT_CLIP_STOPS = 8.0;
 
 const FILM_PROFILES = [
   { id: "portra800", name: "Kodak Portra 800", shadow: 3.3, highlight: 5.3 },
@@ -617,8 +619,8 @@ function findClosestExposureIndex(values, target) {
 
 function updateZoneOverlay(zoneStops) {
   const readableBoost = clamp((NIGHT_EV_THRESHOLD - smoothedEV) / NIGHT_EV_THRESHOLD, 0, 1);
-  const shadowClipThreshold = -shadowLatitudeStops;
-  const highlightClipThreshold = highlightLatitudeStops;
+  const profileShadowClipThreshold = -shadowLatitudeStops;
+  const profileHighlightClipThreshold = highlightLatitudeStops;
   let shadowClippedCount = 0;
   let highlightClippedCount = 0;
 
@@ -654,6 +656,9 @@ function updateZoneOverlay(zoneStops) {
     const value = zoneStops[row][col];
     const absValue = Math.abs(value);
 
+    if (value <= profileShadowClipThreshold) shadowClippedCount += 1;
+    if (value >= profileHighlightClipThreshold) highlightClippedCount += 1;
+
     box.classList.remove(
       "zone-hotspot-warn",
       "zone-hotspot-critical",
@@ -663,12 +668,10 @@ function updateZoneOverlay(zoneStops) {
       "zone-hotspot-clip-highlight"
     );
 
-    if (value <= shadowClipThreshold) {
+    if (value <= -SUPER_SHADOW_CLIP_STOPS) {
       box.classList.add("zone-hotspot-clip-shadow");
-      shadowClippedCount += 1;
-    } else if (value >= highlightClipThreshold) {
+    } else if (value >= SUPER_HIGHLIGHT_CLIP_STOPS) {
       box.classList.add("zone-hotspot-clip-highlight");
-      highlightClippedCount += 1;
     } else if (absValue >= EXTREME_CRITICAL_STOPS) {
       box.classList.add(value >= 0 ? "zone-hotspot-critical-positive" : "zone-hotspot-critical");
     } else if (absValue >= EXTREME_WARN_STOPS) {
@@ -685,7 +688,7 @@ function updateClipStats(shadowClippedCount, highlightClippedCount, totalCells) 
   const safeTotal = Math.max(totalCells, 1);
   const shadowPercent = (shadowClippedCount / safeTotal) * 100;
   const highlightPercent = (highlightClippedCount / safeTotal) * 100;
-  clipStats.textContent = `Clip S ${shadowPercent.toFixed(0)}% | H ${highlightPercent.toFixed(0)}%`;
+  clipStats.textContent = `Profile clip S ${shadowPercent.toFixed(0)}% | H ${highlightPercent.toFixed(0)}%`;
 }
 
 function createZoneCells() {
