@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.6.0";
+const APP_VERSION = "2.7.0";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -40,11 +40,26 @@ const NIGHT_EV_THRESHOLD = 7.0;
 const MODE_SIMPLE = "simple";
 const MODE_PRO = "pro";
 const MODE_STORAGE_KEY = "filmLightMeterMode";
+const FILM_PROFILE_STORAGE_KEY = "filmLightMeterProfile";
+const SHADOW_LATITUDE_STORAGE_KEY = "filmLightMeterShadowLatitude";
+const HIGHLIGHT_LATITUDE_STORAGE_KEY = "filmLightMeterHighlightLatitude";
 const SIMPLE_MODE_HINT = "Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame.";
-const PRO_MODE_HINT = "Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame. Blue square = positive extreme, red square = negative extreme. Darker color from |zone| >= 6. Yellow squares = zones closest to the whole-frame average.";
+const PRO_MODE_HINT = "Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame. Blue/red = far zones, yellow = frame-average zones, black/white = clipped zones for selected film latitude.";
 const AVG_MARKER_MAX_COUNT = 4;
 const AVG_MARKER_MAX_DELTA_STOPS = 0.2;
 const AVG_MARKER_MIN_CELL_GAP = 2;
+const MIN_LATITUDE_STOPS = 0.5;
+const MAX_LATITUDE_STOPS = 12.0;
+const DEFAULT_FILM_PROFILE_ID = "portra800";
+
+const FILM_PROFILES = [
+  { id: "portra800", name: "Kodak Portra 800", shadow: 3.3, highlight: 5.3 },
+  { id: "kodak250d", name: "Kodak Vision3 250D", shadow: 3.2, highlight: 5.0 },
+  { id: "colorNeg", name: "Color Negative (Generic)", shadow: 4.0, highlight: 4.0 },
+  { id: "bwNeg", name: "B&W Negative (Generic)", shadow: 4.0, highlight: 4.0 },
+  { id: "slide", name: "Slide / Reversal (Generic)", shadow: 3.0, highlight: 3.0 },
+  { id: "custom", name: "Custom", shadow: 4.0, highlight: 4.0 }
+];
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("meterCanvas");
@@ -57,6 +72,10 @@ const appVersion = document.getElementById("appVersion");
 const hintBanner = document.getElementById("hintBanner");
 const modeSimpleBtn = document.getElementById("modeSimpleBtn");
 const modeProBtn = document.getElementById("modeProBtn");
+const filmProfileSelect = document.getElementById("filmProfileSelect");
+const shadowLatitudeInput = document.getElementById("shadowLatitudeInput");
+const highlightLatitudeInput = document.getElementById("highlightLatitudeInput");
+const clipStats = document.getElementById("clipStats");
 const isoSelect = document.getElementById("isoSelect");
 const apertureRuler = document.getElementById("apertureRuler");
 const shutterRuler = document.getElementById("shutterRuler");
@@ -67,6 +86,9 @@ let referenceCell = { row: Math.floor(GRID_ROWS / 2), col: Math.floor(GRID_COLS 
 let referencePoint = cellCenter(referenceCell.row, referenceCell.col);
 let averageCells = [{ row: Math.floor(GRID_ROWS / 2), col: Math.floor(GRID_COLS / 2) }];
 let uiMode = readInitialMode();
+let selectedFilmProfileId = readInitialFilmProfileId();
+let shadowLatitudeStops = readInitialLatitude(SHADOW_LATITUDE_STORAGE_KEY, 3.3);
+let highlightLatitudeStops = readInitialLatitude(HIGHLIGHT_LATITUDE_STORAGE_KEY, 5.3);
 
 let animationFrameId = null;
 let lastMeterTs = 0;
@@ -86,6 +108,8 @@ init();
 function init() {
   if (appVersion) appVersion.textContent = `v${APP_VERSION}`;
   setupModeSwitch();
+  setupFilmControls();
+  applyFilmProfileSelection(selectedFilmProfileId, false);
   applyUiMode();
   if (hintBanner) {
     window.setTimeout(() => {
@@ -115,6 +139,7 @@ function init() {
   highlightSelectedRulerIndex(shutterRuler, selectedShutterIndex);
 
   evReadout.textContent = lockedEV.toFixed(1);
+  updateClipStats(0, 0, GRID_ROWS * GRID_COLS);
   syncRulersFromActiveAxis(false);
 
   startBtn.addEventListener("click", startCamera);
@@ -138,10 +163,97 @@ function readInitialMode() {
   return MODE_SIMPLE;
 }
 
+function readInitialFilmProfileId() {
+  try {
+    const savedProfile = localStorage.getItem(FILM_PROFILE_STORAGE_KEY);
+    if (FILM_PROFILES.some((profile) => profile.id === savedProfile)) return savedProfile;
+  } catch {
+    // Ignore storage access issues.
+  }
+  return DEFAULT_FILM_PROFILE_ID;
+}
+
+function readInitialLatitude(storageKey, fallbackValue) {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (raw === null || raw === "") return fallbackValue;
+    const value = Number(raw);
+    if (Number.isFinite(value)) return clamp(value, MIN_LATITUDE_STOPS, MAX_LATITUDE_STOPS);
+  } catch {
+    // Ignore storage access issues.
+  }
+  return fallbackValue;
+}
+
 function setupModeSwitch() {
   if (!modeSimpleBtn || !modeProBtn) return;
   modeSimpleBtn.addEventListener("click", () => setUiMode(MODE_SIMPLE));
   modeProBtn.addEventListener("click", () => setUiMode(MODE_PRO));
+}
+
+function setupFilmControls() {
+  if (!filmProfileSelect || !shadowLatitudeInput || !highlightLatitudeInput) return;
+
+  filmProfileSelect.innerHTML = FILM_PROFILES.map((profile) => {
+    return `<option value="${profile.id}">${profile.name}</option>`;
+  }).join("");
+
+  filmProfileSelect.addEventListener("change", () => {
+    applyFilmProfileSelection(filmProfileSelect.value, true);
+  });
+
+  shadowLatitudeInput.addEventListener("change", onLatitudeInputChange);
+  highlightLatitudeInput.addEventListener("change", onLatitudeInputChange);
+}
+
+function getFilmProfileById(profileId) {
+  return FILM_PROFILES.find((profile) => profile.id === profileId) || FILM_PROFILES[0];
+}
+
+function applyFilmProfileSelection(profileId, persist) {
+  const profile = getFilmProfileById(profileId);
+  selectedFilmProfileId = profile.id;
+
+  if (profile.id !== "custom") {
+    shadowLatitudeStops = profile.shadow;
+    highlightLatitudeStops = profile.highlight;
+  } else {
+    shadowLatitudeStops = clamp(shadowLatitudeStops, MIN_LATITUDE_STOPS, MAX_LATITUDE_STOPS);
+    highlightLatitudeStops = clamp(highlightLatitudeStops, MIN_LATITUDE_STOPS, MAX_LATITUDE_STOPS);
+  }
+
+  refreshFilmControlUI();
+  if (persist) persistFilmSettings();
+}
+
+function onLatitudeInputChange() {
+  if (!shadowLatitudeInput || !highlightLatitudeInput) return;
+
+  const nextShadow = clamp(Number(shadowLatitudeInput.value), MIN_LATITUDE_STOPS, MAX_LATITUDE_STOPS);
+  const nextHighlight = clamp(Number(highlightLatitudeInput.value), MIN_LATITUDE_STOPS, MAX_LATITUDE_STOPS);
+
+  shadowLatitudeStops = Number.isFinite(nextShadow) ? nextShadow : shadowLatitudeStops;
+  highlightLatitudeStops = Number.isFinite(nextHighlight) ? nextHighlight : highlightLatitudeStops;
+
+  selectedFilmProfileId = "custom";
+  refreshFilmControlUI();
+  persistFilmSettings();
+}
+
+function refreshFilmControlUI() {
+  if (filmProfileSelect) filmProfileSelect.value = selectedFilmProfileId;
+  if (shadowLatitudeInput) shadowLatitudeInput.value = shadowLatitudeStops.toFixed(1);
+  if (highlightLatitudeInput) highlightLatitudeInput.value = highlightLatitudeStops.toFixed(1);
+}
+
+function persistFilmSettings() {
+  try {
+    localStorage.setItem(FILM_PROFILE_STORAGE_KEY, selectedFilmProfileId);
+    localStorage.setItem(SHADOW_LATITUDE_STORAGE_KEY, shadowLatitudeStops.toFixed(1));
+    localStorage.setItem(HIGHLIGHT_LATITUDE_STORAGE_KEY, highlightLatitudeStops.toFixed(1));
+  } catch {
+    // Ignore storage access issues.
+  }
 }
 
 function setUiMode(nextMode) {
@@ -505,6 +617,10 @@ function findClosestExposureIndex(values, target) {
 
 function updateZoneOverlay(zoneStops) {
   const readableBoost = clamp((NIGHT_EV_THRESHOLD - smoothedEV) / NIGHT_EV_THRESHOLD, 0, 1);
+  const shadowClipThreshold = -shadowLatitudeStops;
+  const highlightClipThreshold = highlightLatitudeStops;
+  let shadowClippedCount = 0;
+  let highlightClippedCount = 0;
 
   zoneOverlay.querySelectorAll(".zone-cell").forEach((node) => {
     const row = Number(node.dataset.row);
@@ -542,17 +658,34 @@ function updateZoneOverlay(zoneStops) {
       "zone-hotspot-warn",
       "zone-hotspot-critical",
       "zone-hotspot-warn-positive",
-      "zone-hotspot-critical-positive"
+      "zone-hotspot-critical-positive",
+      "zone-hotspot-clip-shadow",
+      "zone-hotspot-clip-highlight"
     );
 
-    if (absValue >= EXTREME_CRITICAL_STOPS) {
+    if (value <= shadowClipThreshold) {
+      box.classList.add("zone-hotspot-clip-shadow");
+      shadowClippedCount += 1;
+    } else if (value >= highlightClipThreshold) {
+      box.classList.add("zone-hotspot-clip-highlight");
+      highlightClippedCount += 1;
+    } else if (absValue >= EXTREME_CRITICAL_STOPS) {
       box.classList.add(value >= 0 ? "zone-hotspot-critical-positive" : "zone-hotspot-critical");
     } else if (absValue >= EXTREME_WARN_STOPS) {
       box.classList.add(value >= 0 ? "zone-hotspot-warn-positive" : "zone-hotspot-warn");
     }
   });
 
+  updateClipStats(shadowClippedCount, highlightClippedCount, GRID_ROWS * GRID_COLS);
   paintReferenceCell();
+}
+
+function updateClipStats(shadowClippedCount, highlightClippedCount, totalCells) {
+  if (!clipStats) return;
+  const safeTotal = Math.max(totalCells, 1);
+  const shadowPercent = (shadowClippedCount / safeTotal) * 100;
+  const highlightPercent = (highlightClippedCount / safeTotal) * 100;
+  clipStats.textContent = `Clip S ${shadowPercent.toFixed(0)}% | H ${highlightPercent.toFixed(0)}%`;
 }
 
 function createZoneCells() {
