@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.5.0";
+const APP_VERSION = "2.6.0";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -41,13 +41,16 @@ const MODE_SIMPLE = "simple";
 const MODE_PRO = "pro";
 const MODE_STORAGE_KEY = "filmLightMeterMode";
 const SIMPLE_MODE_HINT = "Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame.";
-const PRO_MODE_HINT = "Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame. Blue square = positive extreme, red square = negative extreme. Darker color from |zone| >= 6. Small yellow dot = zone closest to the whole-frame average.";
+const PRO_MODE_HINT = "Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame. Blue square = positive extreme, red square = negative extreme. Darker color from |zone| >= 6. Yellow squares = zones closest to the whole-frame average.";
+const AVG_MARKER_MAX_COUNT = 4;
+const AVG_MARKER_MAX_DELTA_STOPS = 0.2;
+const AVG_MARKER_MIN_CELL_GAP = 2;
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("meterCanvas");
 const zoneOverlay = document.getElementById("zoneOverlay");
 const tapMarker = document.getElementById("tapMarker");
-const avgMarker = document.getElementById("avgMarker");
+const avgMarkers = document.getElementById("avgMarkers");
 const startBtn = document.getElementById("startBtn");
 const evReadout = document.getElementById("evReadout");
 const appVersion = document.getElementById("appVersion");
@@ -62,7 +65,7 @@ const cameraWrap = document.getElementById("cameraWrap");
 let selectedISO = 400;
 let referenceCell = { row: Math.floor(GRID_ROWS / 2), col: Math.floor(GRID_COLS / 2) };
 let referencePoint = cellCenter(referenceCell.row, referenceCell.col);
-let averageCell = { row: Math.floor(GRID_ROWS / 2), col: Math.floor(GRID_COLS / 2) };
+let averageCells = [{ row: Math.floor(GRID_ROWS / 2), col: Math.floor(GRID_COLS / 2) }];
 let uiMode = readInitialMode();
 
 let animationFrameId = null;
@@ -99,7 +102,7 @@ function init() {
   });
 
   renderTapMarker();
-  renderAverageMarker();
+  renderAverageMarkers();
   createZoneCells();
   paintReferenceCell();
   buildRulers();
@@ -241,15 +244,22 @@ function renderTapMarker() {
   tapMarker.style.top = `${referencePoint.y * 100}%`;
 }
 
-function renderAverageMarker() {
-  if (!avgMarker) return;
-  const center = cellCenter(averageCell.row, averageCell.col);
-  avgMarker.style.left = `${center.x * 100}%`;
-  avgMarker.style.top = `${center.y * 100}%`;
+function renderAverageMarkers() {
+  if (!avgMarkers) return;
+  avgMarkers.innerHTML = "";
+
+  averageCells.forEach((cell) => {
+    const center = cellCenter(cell.row, cell.col);
+    const marker = document.createElement("div");
+    marker.className = "avg-marker";
+    marker.style.left = `${center.x * 100}%`;
+    marker.style.top = `${center.y * 100}%`;
+    avgMarkers.appendChild(marker);
+  });
 }
 
 function updateAverageMarkerFromGrid(grid) {
-  if (!avgMarker || !grid || !grid.length) return;
+  if (!avgMarkers || !grid || !grid.length) return;
 
   let sum = 0;
   let count = 0;
@@ -261,23 +271,44 @@ function updateAverageMarkerFromGrid(grid) {
   }
 
   const meanLuma = sum / Math.max(count, 1);
-  let bestRow = 0;
-  let bestCol = 0;
-  let bestDelta = Number.POSITIVE_INFINITY;
+  const candidates = [];
 
   for (let row = 0; row < GRID_ROWS; row += 1) {
     for (let col = 0; col < GRID_COLS; col += 1) {
-      const delta = Math.abs(grid[row][col] - meanLuma);
-      if (delta < bestDelta) {
-        bestDelta = delta;
-        bestRow = row;
-        bestCol = col;
-      }
+      const deltaStops = Math.abs(
+        Math.log2(Math.max(grid[row][col], 1e-4) / Math.max(meanLuma, 1e-4))
+      );
+      candidates.push({ row, col, deltaStops });
     }
   }
 
-  averageCell = { row: bestRow, col: bestCol };
-  renderAverageMarker();
+  candidates.sort((a, b) => a.deltaStops - b.deltaStops);
+
+  const chosen = [];
+  for (let i = 0; i < candidates.length; i += 1) {
+    const candidate = candidates[i];
+
+    if (chosen.length && candidate.deltaStops > AVG_MARKER_MAX_DELTA_STOPS && chosen.length >= 2) {
+      break;
+    }
+
+    const tooClose = chosen.some((cell) => {
+      return Math.abs(cell.row - candidate.row) < AVG_MARKER_MIN_CELL_GAP
+        && Math.abs(cell.col - candidate.col) < AVG_MARKER_MIN_CELL_GAP;
+    });
+
+    if (!tooClose) {
+      chosen.push({ row: candidate.row, col: candidate.col });
+      if (chosen.length >= AVG_MARKER_MAX_COUNT) break;
+    }
+  }
+
+  if (!chosen.length && candidates.length) {
+    chosen.push({ row: candidates[0].row, col: candidates[0].col });
+  }
+
+  averageCells = chosen;
+  renderAverageMarkers();
 }
 
 function loopMetering() {

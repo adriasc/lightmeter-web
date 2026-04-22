@@ -156,7 +156,7 @@ video,
 }
 
 .mode-simple .zone-hotspot,
-.mode-simple .avg-marker {
+.mode-simple .avg-markers {
   display: none;
 }
 
@@ -221,17 +221,23 @@ video,
   pointer-events: none;
 }
 
-.avg-marker {
+.avg-markers {
   position: absolute;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  border: 2px solid rgba(255, 221, 99, 0.98);
-  background: radial-gradient(circle, rgba(255, 238, 150, 1) 0 2px, rgba(255, 214, 66, 0.22) 3px, transparent 4px);
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35), 0 0 16px rgba(255, 216, 79, 0.6);
-  transform: translate(-50%, -50%);
+  inset: 0;
   pointer-events: none;
   z-index: 2;
+}
+
+.avg-marker {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 2px solid rgba(255, 224, 107, 0.98);
+  background: rgba(255, 216, 79, 0.28);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 0 12px rgba(255, 216, 79, 0.48);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 .tap-marker::before,
