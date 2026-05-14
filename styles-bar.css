@@ -183,19 +183,20 @@ video,
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10px;
   font-weight: 800;
-  padding: 1px 3px;
-  border-radius: 8px;
-  background: rgba(7, 10, 15, 0.64);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
   color: #fff;
-  border: 1px solid rgba(188, 205, 230, 0.2);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  border: none;
+  box-shadow: none;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.78), 0 0 10px rgba(0, 0, 0, 0.36);
   z-index: 1;
 }
 
 .zone-low-light {
-  background: rgba(0, 0, 0, 0.78);
-  border-color: rgba(220, 233, 255, 0.4);
-  text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+  background: transparent;
+  border-color: transparent;
+  text-shadow: 0 0 5px rgba(0, 0, 0, 0.92), 0 0 14px rgba(0, 0, 0, 0.55);
 }
 
 .zone-positive-low {
@@ -221,8 +222,8 @@ video,
 }
 
 .reference-zone {
-  border-color: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2), 0 0 10px rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(255, 232, 148, 0.95), 0 0 16px rgba(255, 221, 110, 0.75);
 }
 
 .tap-marker {
