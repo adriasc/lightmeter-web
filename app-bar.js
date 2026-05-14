@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.7.2";
+const APP_VERSION = "2.8.1";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -21,17 +21,19 @@ const GRID_ROWS = 10;
 const GRID_COLS = 14;
 const EV_CALIBRATION_OFFSET = 4.5;
 
-const UPDATE_INTERVAL_MS = 220;
+const UPDATE_INTERVAL_SIMPLE_MS = 320;
+const UPDATE_INTERVAL_PRO_MS = 260;
 const GRID_SMOOTHING = 0.34;
 const EV_SMOOTHING = 0.25;
 const NEAR_ZERO_THRESHOLD = 0.2;
 const STOP_EXPANSION_FACTOR = 1.8;
-const REF_PATCH_RADIUS_PX = 8;
 const REF_PATCH_STEP_PX = 1;
 const ZONE_PATCH_RATIO = 0.06;
-const ZONE_PATCH_STEP_PX = 1;
+const ZONE_PATCH_STEP_PX = 2;
 const RULER_COL_WIDTH = 66;
 const RULER_GAP = 8;
+const PROCESSING_MAX_WIDTH = 720;
+const PROCESSING_MAX_HEIGHT = 405;
 
 const LABEL_STAGGER_CELL_FRACTION = 0.22;
 const EXTREME_WARN_STOPS = 3.0;
@@ -43,8 +45,9 @@ const MODE_STORAGE_KEY = "filmLightMeterMode";
 const FILM_PROFILE_STORAGE_KEY = "filmLightMeterProfile";
 const SHADOW_LATITUDE_STORAGE_KEY = "filmLightMeterShadowLatitude";
 const HIGHLIGHT_LATITUDE_STORAGE_KEY = "filmLightMeterHighlightLatitude";
-const SIMPLE_MODE_HINT = "Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame.";
-const PRO_MODE_HINT = "Tap to lock exposure. Each number covers about 1/14 width x 1/10 height of frame. Blue/red = far zones, yellow = frame-average zones, black/white = super-extreme zones (about +/-8 stops).";
+const METERING_MODE_STORAGE_KEY = "filmLightMeterMeteringMode";
+const SIMPLE_MODE_HINT = "Tap to set the metering point. Each number covers about 1/14 width x 1/10 height of frame.";
+const PRO_MODE_HINT = "Tap to set the metering point. Each number covers about 1/14 width x 1/10 height of frame. Blue/red = far zones, yellow = frame-average zones, black/white = super-extreme zones (about +/-8 stops).";
 const AVG_MARKER_MAX_COUNT = 4;
 const AVG_MARKER_MAX_DELTA_STOPS = 0.2;
 const AVG_MARKER_MIN_CELL_GAP = 2;
@@ -53,6 +56,7 @@ const MAX_LATITUDE_STOPS = 12.0;
 const DEFAULT_FILM_PROFILE_ID = "portra800";
 const SUPER_SHADOW_CLIP_STOPS = 8.0;
 const SUPER_HIGHLIGHT_CLIP_STOPS = 8.0;
+const DEFAULT_METERING_MODE_ID = "spot";
 
 const FILM_PROFILES = [
   { id: "portra800", name: "Kodak Portra 800", shadow: 3.3, highlight: 5.3 },
@@ -61,6 +65,12 @@ const FILM_PROFILES = [
   { id: "bwNeg", name: "B&W Negative (Generic)", shadow: 4.0, highlight: 4.0 },
   { id: "slide", name: "Slide / Reversal (Generic)", shadow: 3.0, highlight: 3.0 },
   { id: "custom", name: "Custom", shadow: 4.0, highlight: 4.0 }
+];
+
+const METERING_MODES = [
+  { id: "spot", name: "Spot (small)", radiusRatio: 0.008, minRadiusPx: 5, maxRadiusPx: 14 },
+  { id: "balanced", name: "Balanced", radiusRatio: 0.02, minRadiusPx: 12, maxRadiusPx: 42 },
+  { id: "average", name: "Average (wide)", radiusRatio: 0.06, minRadiusPx: 26, maxRadiusPx: 120 }
 ];
 
 const video = document.getElementById("video");
@@ -79,6 +89,7 @@ const shadowLatitudeInput = document.getElementById("shadowLatitudeInput");
 const highlightLatitudeInput = document.getElementById("highlightLatitudeInput");
 const clipStats = document.getElementById("clipStats");
 const isoSelect = document.getElementById("isoSelect");
+const meteringModeSelect = document.getElementById("meteringModeSelect");
 const apertureRuler = document.getElementById("apertureRuler");
 const shutterRuler = document.getElementById("shutterRuler");
 const cameraWrap = document.getElementById("cameraWrap");
@@ -91,6 +102,7 @@ let uiMode = readInitialMode();
 let selectedFilmProfileId = readInitialFilmProfileId();
 let shadowLatitudeStops = readInitialLatitude(SHADOW_LATITUDE_STORAGE_KEY, 3.3);
 let highlightLatitudeStops = readInitialLatitude(HIGHLIGHT_LATITUDE_STORAGE_KEY, 5.3);
+let selectedMeteringModeId = readInitialMeteringModeId();
 
 let animationFrameId = null;
 let lastMeterTs = 0;
@@ -98,7 +110,6 @@ let smoothedGrid = null;
 let smoothedEV = 10;
 let smoothedRefLuma = null;
 let lockedEV = 10;
-let needsMeterLock = true;
 let selectedApertureIndex = findClosestExposureIndex(APERTURE_RULER_VALUES, 5.6);
 let selectedShutterIndex = findClosestExposureIndex(RULER_SHUTTERS, 1 / 125);
 let activeExposureAxis = "aperture";
@@ -110,6 +121,7 @@ init();
 function init() {
   if (appVersion) appVersion.textContent = `v${APP_VERSION}`;
   setupModeSwitch();
+  setupMeteringModeControl();
   setupFilmControls();
   applyFilmProfileSelection(selectedFilmProfileId, false);
   applyUiMode();
@@ -146,10 +158,13 @@ function init() {
 
   startBtn.addEventListener("click", startCamera);
   cameraWrap.addEventListener("click", onCameraTap);
-  isoSelect.addEventListener("change", () => {
+  const onIsoChanged = () => {
     selectedISO = Number(isoSelect.value);
     syncRulersFromActiveAxis(true);
-  });
+  };
+  isoSelect.addEventListener("change", onIsoChanged);
+  isoSelect.addEventListener("input", onIsoChanged);
+  isoSelect.addEventListener("blur", onIsoChanged);
   apertureRuler.addEventListener("scroll", onApertureRulerScroll, { passive: true });
   shutterRuler.addEventListener("scroll", onShutterRulerScroll, { passive: true });
   window.addEventListener("resize", onResize);
@@ -175,6 +190,16 @@ function readInitialFilmProfileId() {
   return DEFAULT_FILM_PROFILE_ID;
 }
 
+function readInitialMeteringModeId() {
+  try {
+    const savedMode = localStorage.getItem(METERING_MODE_STORAGE_KEY);
+    if (METERING_MODES.some((mode) => mode.id === savedMode)) return savedMode;
+  } catch {
+    // Ignore storage access issues.
+  }
+  return DEFAULT_METERING_MODE_ID;
+}
+
 function readInitialLatitude(storageKey, fallbackValue) {
   try {
     const raw = localStorage.getItem(storageKey);
@@ -191,6 +216,49 @@ function setupModeSwitch() {
   if (!modeSimpleBtn || !modeProBtn) return;
   modeSimpleBtn.addEventListener("click", () => setUiMode(MODE_SIMPLE));
   modeProBtn.addEventListener("click", () => setUiMode(MODE_PRO));
+}
+
+function setupMeteringModeControl() {
+  if (!meteringModeSelect) return;
+
+  meteringModeSelect.innerHTML = METERING_MODES.map((mode) => {
+    return `<option value="${mode.id}">${mode.name}</option>`;
+  }).join("");
+
+  meteringModeSelect.value = selectedMeteringModeId;
+  meteringModeSelect.addEventListener("change", onMeteringModeChanged);
+  meteringModeSelect.addEventListener("input", onMeteringModeChanged);
+}
+
+function onMeteringModeChanged() {
+  if (!meteringModeSelect) return;
+  selectedMeteringModeId = getMeteringModeById(meteringModeSelect.value).id;
+  meteringModeSelect.value = selectedMeteringModeId;
+  persistMeteringMode();
+}
+
+function persistMeteringMode() {
+  try {
+    localStorage.setItem(METERING_MODE_STORAGE_KEY, selectedMeteringModeId);
+  } catch {
+    // Ignore storage access issues.
+  }
+}
+
+function getMeteringModeById(modeId) {
+  return METERING_MODES.find((mode) => mode.id === modeId) || METERING_MODES[0];
+}
+
+function getReferencePatchRadiusPx(frameW, frameH) {
+  const mode = getMeteringModeById(selectedMeteringModeId);
+  const base = Math.min(frameW, frameH);
+  const radius = Math.round(base * mode.radiusRatio);
+  return clamp(radius, mode.minRadiusPx, mode.maxRadiusPx);
+}
+
+function getMeterUpdateIntervalMs() {
+  if (uiMode === MODE_PRO) return UPDATE_INTERVAL_PRO_MS;
+  return UPDATE_INTERVAL_SIMPLE_MS;
 }
 
 function setupFilmControls() {
@@ -300,8 +368,9 @@ async function startCamera() {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
+        width: { ideal: 1280, max: 1280 },
+        height: { ideal: 720, max: 720 },
+        frameRate: { ideal: 24, max: 30 }
       },
       audio: false
     });
@@ -350,7 +419,6 @@ function onCameraTap(event) {
 
   renderTapMarker();
   paintReferenceCell();
-  needsMeterLock = true;
 }
 
 function renderTapMarker() {
@@ -429,7 +497,8 @@ function loopMetering() {
   if (animationFrameId) cancelAnimationFrame(animationFrameId);
 
   const tick = (ts) => {
-    if (video.videoWidth > 0 && video.videoHeight > 0 && ts - lastMeterTs >= UPDATE_INTERVAL_MS) {
+    const intervalMs = getMeterUpdateIntervalMs();
+    if (!document.hidden && video.videoWidth > 0 && video.videoHeight > 0 && ts - lastMeterTs >= intervalMs) {
       meterFrame();
       lastMeterTs = ts;
     }
@@ -440,8 +509,15 @@ function loopMetering() {
 }
 
 function meterFrame() {
-  const w = video.videoWidth;
-  const h = video.videoHeight;
+  const sourceW = video.videoWidth;
+  const sourceH = video.videoHeight;
+  const processingScale = Math.min(
+    1,
+    PROCESSING_MAX_WIDTH / Math.max(sourceW, 1),
+    PROCESSING_MAX_HEIGHT / Math.max(sourceH, 1)
+  );
+  const w = Math.max(1, Math.round(sourceW * processingScale));
+  const h = Math.max(1, Math.round(sourceH * processingScale));
 
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w;
@@ -469,7 +545,8 @@ function meterFrame() {
   updateAverageMarkerFromGrid(smoothedGrid);
   const refPixelX = clamp(Math.round(referencePoint.x * (w - 1)), 0, w - 1);
   const refPixelY = clamp(Math.round(referencePoint.y * (h - 1)), 0, h - 1);
-  const rawRefLuma = sampleLumaPatch(data, w, h, refPixelX, refPixelY, REF_PATCH_RADIUS_PX, REF_PATCH_STEP_PX);
+  const refPatchRadiusPx = getReferencePatchRadiusPx(w, h);
+  const rawRefLuma = sampleLumaPatch(data, w, h, refPixelX, refPixelY, refPatchRadiusPx, REF_PATCH_STEP_PX);
   smoothedRefLuma = smoothedRefLuma === null ? rawRefLuma : blend(smoothedRefLuma, rawRefLuma, GRID_SMOOTHING);
 
   const refLuma = Math.max(smoothedRefLuma, 1e-4);
@@ -480,12 +557,9 @@ function meterFrame() {
   const rawEV = Math.log2(refLuma * 100) + EV_CALIBRATION_OFFSET;
   smoothedEV = blend(smoothedEV, rawEV, EV_SMOOTHING);
 
-  if (needsMeterLock) {
-    lockedEV = smoothedEV;
-    needsMeterLock = false;
-    evReadout.textContent = lockedEV.toFixed(1);
-    syncRulersFromActiveAxis(true);
-  }
+  lockedEV = smoothedEV;
+  evReadout.textContent = lockedEV.toFixed(1);
+  syncRulersFromActiveAxis(false);
 }
 
 function buildRulers() {
@@ -509,19 +583,27 @@ function syncRulersFromActiveAxis(smoothScroll) {
 function updateShutterRulerFromAperture(ev100, smoothScroll) {
   const selectedAperture = APERTURE_RULER_VALUES[selectedApertureIndex];
   const requiredShutter = shutterSeconds(ev100, selectedISO, selectedAperture);
-  selectedShutterIndex = findClosestExposureIndex(RULER_SHUTTERS, requiredShutter);
+  const nextShutterIndex = findClosestExposureIndex(RULER_SHUTTERS, requiredShutter);
+  const changed = nextShutterIndex !== selectedShutterIndex;
+  selectedShutterIndex = nextShutterIndex;
 
-  centerRulerAtIndex(shutterRuler, selectedShutterIndex, smoothScroll);
-  highlightSelectedRulerIndex(shutterRuler, selectedShutterIndex);
+  if (changed || smoothScroll) {
+    centerRulerAtIndex(shutterRuler, selectedShutterIndex, smoothScroll);
+    highlightSelectedRulerIndex(shutterRuler, selectedShutterIndex);
+  }
 }
 
 function updateApertureRulerFromShutter(ev100, smoothScroll) {
   const selectedShutter = RULER_SHUTTERS[selectedShutterIndex];
   const requiredAperture = apertureFor(ev100, selectedISO, selectedShutter);
-  selectedApertureIndex = findClosestExposureIndex(APERTURE_RULER_VALUES, requiredAperture);
+  const nextApertureIndex = findClosestExposureIndex(APERTURE_RULER_VALUES, requiredAperture);
+  const changed = nextApertureIndex !== selectedApertureIndex;
+  selectedApertureIndex = nextApertureIndex;
 
-  centerRulerAtIndex(apertureRuler, selectedApertureIndex, smoothScroll);
-  highlightSelectedRulerIndex(apertureRuler, selectedApertureIndex);
+  if (changed || smoothScroll) {
+    centerRulerAtIndex(apertureRuler, selectedApertureIndex, smoothScroll);
+    highlightSelectedRulerIndex(apertureRuler, selectedApertureIndex);
+  }
 }
 
 function onApertureRulerScroll() {
