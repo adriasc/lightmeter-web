@@ -189,81 +189,42 @@ video,
   color: #fff;
   border: none;
   box-shadow: none;
-  text-shadow: none;
-  -webkit-text-stroke: 0;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.82), 0 0 6px rgba(0, 0, 0, 0.46);
   z-index: 1;
 }
 
 .zone-low-light {
   background: transparent;
   border-color: transparent;
-  text-shadow: none;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.62);
 }
 
 .zone-positive-low {
   color: #6ec3ff;
-  -webkit-text-stroke: 0.8px rgba(7, 33, 86, 0.98);
-  text-shadow:
-    -1px 0 0 rgba(7, 33, 86, 0.98),
-    1px 0 0 rgba(7, 33, 86, 0.98),
-    0 -1px 0 rgba(7, 33, 86, 0.98),
-    0 1px 0 rgba(7, 33, 86, 0.98),
-    -1px -1px 0 rgba(7, 33, 86, 0.92),
-    1px -1px 0 rgba(7, 33, 86, 0.92),
-    -1px 1px 0 rgba(7, 33, 86, 0.92),
-    1px 1px 0 rgba(7, 33, 86, 0.92);
 }
 
 .zone-positive-high {
   color: #00c2ff;
-  -webkit-text-stroke: 0.8px rgba(7, 33, 86, 0.98);
-  text-shadow:
-    -1px 0 0 rgba(7, 33, 86, 0.98),
-    1px 0 0 rgba(7, 33, 86, 0.98),
-    0 -1px 0 rgba(7, 33, 86, 0.98),
-    0 1px 0 rgba(7, 33, 86, 0.98),
-    -1px -1px 0 rgba(7, 33, 86, 0.92),
-    1px -1px 0 rgba(7, 33, 86, 0.92),
-    -1px 1px 0 rgba(7, 33, 86, 0.92),
-    1px 1px 0 rgba(7, 33, 86, 0.92);
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.82), 0 0 6px rgba(0, 0, 0, 0.46), 0 0 7px rgba(0, 194, 255, 0.28);
 }
 
 .zone-negative-low {
   color: #ff8d8d;
-  -webkit-text-stroke: 0.8px rgba(90, 11, 11, 0.98);
-  text-shadow:
-    -1px 0 0 rgba(90, 11, 11, 0.98),
-    1px 0 0 rgba(90, 11, 11, 0.98),
-    0 -1px 0 rgba(90, 11, 11, 0.98),
-    0 1px 0 rgba(90, 11, 11, 0.98),
-    -1px -1px 0 rgba(90, 11, 11, 0.92),
-    1px -1px 0 rgba(90, 11, 11, 0.92),
-    -1px 1px 0 rgba(90, 11, 11, 0.92),
-    1px 1px 0 rgba(90, 11, 11, 0.92);
 }
 
 .zone-negative-high {
   color: #ff5656;
-  -webkit-text-stroke: 0.8px rgba(90, 11, 11, 0.98);
-  text-shadow:
-    -1px 0 0 rgba(90, 11, 11, 0.98),
-    1px 0 0 rgba(90, 11, 11, 0.98),
-    0 -1px 0 rgba(90, 11, 11, 0.98),
-    0 1px 0 rgba(90, 11, 11, 0.98),
-    -1px -1px 0 rgba(90, 11, 11, 0.92),
-    1px -1px 0 rgba(90, 11, 11, 0.92),
-    -1px 1px 0 rgba(90, 11, 11, 0.92),
-    1px 1px 0 rgba(90, 11, 11, 0.92);
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.82), 0 0 6px rgba(0, 0, 0, 0.46), 0 0 7px rgba(255, 86, 86, 0.3);
 }
 
 .zone-neutral {
   color: #fff;
-  -webkit-text-stroke: 0.7px rgba(0, 0, 0, 0.95);
-  text-shadow:
-    -1px 0 0 rgba(0, 0, 0, 0.95),
-    1px 0 0 rgba(0, 0, 0, 0.95),
-    0 -1px 0 rgba(0, 0, 0, 0.95),
-    0 1px 0 rgba(0, 0, 0, 0.95);
+}
+
+.zone-decimal {
+  font-size: 0.5em;
+  vertical-align: 0.05em;
+  letter-spacing: -0.01em;
 }
 
 .reference-zone {

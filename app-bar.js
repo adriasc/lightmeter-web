@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.10.4";
+const APP_VERSION = "2.10.5";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -873,9 +873,10 @@ function updateZoneOverlay(zoneStops) {
     const value = zoneStops[row][col];
     const absValue = Math.abs(value);
 
-    node.textContent = `${value >= 0 ? "+" : ""}${value.toFixed(1)}`;
+    node.innerHTML = formatZoneValueMarkup(value);
 
-    const fontSize = clamp(8.8 + absValue * 1.2 + readableBoost * 2.8, 9, 14);
+    const baseFontSize = clamp(8.8 + absValue * 1.2 + readableBoost * 2.8, 9, 14);
+    const fontSize = clamp(baseFontSize * 1.5, 13.5, 21);
     const padX = 3.0 + readableBoost * 1.8;
     const padY = 1.0 + readableBoost * 0.9;
     node.style.fontSize = `${fontSize}px`;
@@ -1023,6 +1024,13 @@ function formatShutter(seconds) {
   if (seconds >= 1) return `${seconds.toFixed(1)}s`;
   if (seconds >= 0.3) return `${seconds.toFixed(1)}s`;
   return `1/${Math.round(1 / seconds)}`;
+}
+
+function formatZoneValueMarkup(value) {
+  const absText = Math.abs(value).toFixed(1);
+  const [whole, fraction = "0"] = absText.split(".");
+  if (whole === "0") return `.${fraction}`;
+  return `${whole}<span class="zone-decimal">.${fraction}</span>`;
 }
 
 function isWholeStopValue(value, wholeStops) {
