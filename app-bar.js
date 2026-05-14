@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.9.0";
+const APP_VERSION = "2.9.1";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -63,6 +63,7 @@ const MIN_METER_CALIBRATION_STOPS = -8.0;
 const MAX_METER_CALIBRATION_STOPS = 8.0;
 const RULER_AUTO_SCROLL_GUARD_MS = 260;
 const EXPOSURE_INDEX_HYSTERESIS_STOPS = 0.24;
+const MANUAL_EXPOSURE_INTERACTION_HOLD_MS = 420;
 
 const FILM_PROFILES = [
   { id: "portra800", name: "Kodak Portra 800", shadow: 3.3, highlight: 5.3 },
@@ -124,6 +125,7 @@ let selectedShutterIndex = findClosestExposureIndex(RULER_SHUTTERS, 1 / 125);
 let activeExposureAxis = "aperture";
 let isApertureAutoScrolling = false;
 let isShutterAutoScrolling = false;
+let manualExposureInteractionUntilTs = 0;
 
 init();
 
@@ -177,6 +179,12 @@ function init() {
   isoSelect.addEventListener("blur", onIsoChanged);
   apertureRuler.addEventListener("scroll", onApertureRulerScroll, { passive: true });
   shutterRuler.addEventListener("scroll", onShutterRulerScroll, { passive: true });
+  apertureRuler.addEventListener("pointerdown", markManualExposureInteraction, { passive: true });
+  shutterRuler.addEventListener("pointerdown", markManualExposureInteraction, { passive: true });
+  apertureRuler.addEventListener("touchstart", markManualExposureInteraction, { passive: true });
+  shutterRuler.addEventListener("touchstart", markManualExposureInteraction, { passive: true });
+  apertureRuler.addEventListener("wheel", markManualExposureInteraction, { passive: true });
+  shutterRuler.addEventListener("wheel", markManualExposureInteraction, { passive: true });
   window.addEventListener("resize", onResize);
 }
 
@@ -302,6 +310,14 @@ function renderMeterPatchFromCurrentVideo() {
 function getMeterUpdateIntervalMs() {
   if (uiMode === MODE_PRO) return UPDATE_INTERVAL_PRO_MS;
   return UPDATE_INTERVAL_SIMPLE_MS;
+}
+
+function markManualExposureInteraction() {
+  manualExposureInteractionUntilTs = Date.now() + MANUAL_EXPOSURE_INTERACTION_HOLD_MS;
+}
+
+function isManualExposureInteractionActive() {
+  return Date.now() < manualExposureInteractionUntilTs;
 }
 
 function setupFilmControls() {
@@ -631,6 +647,10 @@ function meterFrame() {
   const rawEV = Math.log2(refLuma * 100) + EV_CALIBRATION_OFFSET + meterCalibrationStops;
   smoothedEV = blend(smoothedEV, rawEV, EV_SMOOTHING);
 
+  if (isManualExposureInteractionActive()) {
+    return;
+  }
+
   lockedEV = smoothedEV;
   evReadout.textContent = lockedEV.toFixed(1);
   syncRulersFromActiveAxis(false);
@@ -692,6 +712,7 @@ function updateApertureRulerFromShutter(ev100, smoothScroll) {
 
 function onApertureRulerScroll() {
   if (isApertureAutoScrolling) return;
+  markManualExposureInteraction();
 
   const index = getCenteredRulerIndex(apertureRuler, APERTURE_RULER_VALUES.length);
   if (index !== selectedApertureIndex) {
@@ -704,6 +725,7 @@ function onApertureRulerScroll() {
 
 function onShutterRulerScroll() {
   if (isShutterAutoScrolling) return;
+  markManualExposureInteraction();
 
   const index = getCenteredRulerIndex(shutterRuler, RULER_SHUTTERS.length);
   if (index !== selectedShutterIndex) {
