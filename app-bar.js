@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.10.0";
+const APP_VERSION = "2.10.1";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -70,6 +70,7 @@ const MAX_METER_CALIBRATION_STOPS = 8.0;
 const RULER_AUTO_SCROLL_GUARD_MS = 260;
 const EXPOSURE_INDEX_HYSTERESIS_STOPS = 0.24;
 const MANUAL_EXPOSURE_INTERACTION_HOLD_MS = 700;
+const USER_EXPOSURE_INTENT_WINDOW_MS = 1200;
 
 const FILM_PROFILES = [
   { id: "portra800", name: "Kodak Portra 800", shadow: 3.3, highlight: 5.3 },
@@ -128,11 +129,12 @@ let smoothedRefLuma = null;
 let lockedEV = 10;
 let selectedApertureIndex = findClosestExposureIndex(APERTURE_RULER_VALUES, 5.6);
 let selectedShutterIndex = findClosestExposureIndex(RULER_SHUTTERS, 1 / 125);
-let activeExposureAxis = "aperture";
-let manualExposureAxis = activeExposureAxis;
+let lockedExposureAxis = "aperture";
 let isApertureAutoScrolling = false;
 let isShutterAutoScrolling = false;
 let manualExposureInteractionUntilTs = 0;
+let apertureUserIntentUntilTs = 0;
+let shutterUserIntentUntilTs = 0;
 
 init();
 
@@ -320,18 +322,25 @@ function getMeterUpdateIntervalMs() {
 }
 
 function onApertureRulerInteractionStart() {
-  markManualExposureInteraction("aperture");
+  markUserExposureIntent("aperture");
 }
 
 function onShutterRulerInteractionStart() {
-  markManualExposureInteraction("shutter");
+  markUserExposureIntent("shutter");
 }
 
-function markManualExposureInteraction(axis) {
-  if (axis === "aperture" || axis === "shutter") {
-    manualExposureAxis = axis;
-    activeExposureAxis = axis;
+function markUserExposureIntent(axis) {
+  if (axis === "aperture") {
+    apertureUserIntentUntilTs = Date.now() + USER_EXPOSURE_INTENT_WINDOW_MS;
+    lockedExposureAxis = "aperture";
+  } else if (axis === "shutter") {
+    shutterUserIntentUntilTs = Date.now() + USER_EXPOSURE_INTENT_WINDOW_MS;
+    lockedExposureAxis = "shutter";
   }
+  markManualExposureInteraction();
+}
+
+function markManualExposureInteraction() {
   manualExposureInteractionUntilTs = Date.now() + MANUAL_EXPOSURE_INTERACTION_HOLD_MS;
 }
 
@@ -339,16 +348,15 @@ function isManualExposureInteractionActive() {
   return Date.now() < manualExposureInteractionUntilTs;
 }
 
-function getSyncExposureAxis() {
-  if (isManualExposureInteractionActive() && (manualExposureAxis === "aperture" || manualExposureAxis === "shutter")) {
-    return manualExposureAxis;
-  }
-  return activeExposureAxis;
+function hasRecentUserExposureIntent(axis) {
+  const nowTs = Date.now();
+  if (axis === "aperture") return nowTs < apertureUserIntentUntilTs;
+  if (axis === "shutter") return nowTs < shutterUserIntentUntilTs;
+  return false;
 }
 
 function shouldIgnoreScrollFromAxis(axis) {
-  if (!isManualExposureInteractionActive()) return false;
-  return manualExposureAxis !== axis;
+  return !hasRecentUserExposureIntent(axis);
 }
 
 function setupFilmControls() {
@@ -700,7 +708,7 @@ function buildRulers() {
 }
 
 function syncRulersFromActiveAxis(smoothScroll) {
-  if (getSyncExposureAxis() === "shutter") {
+  if (lockedExposureAxis === "shutter") {
     updateApertureRulerFromShutter(lockedEV, smoothScroll);
   } else {
     updateShutterRulerFromAperture(lockedEV, smoothScroll);
@@ -746,12 +754,11 @@ function updateApertureRulerFromShutter(ev100, smoothScroll) {
 function onApertureRulerScroll() {
   if (isApertureAutoScrolling) return;
   if (shouldIgnoreScrollFromAxis("aperture")) return;
-  markManualExposureInteraction("aperture");
+  markUserExposureIntent("aperture");
 
   const index = getCenteredRulerIndex(apertureRuler, APERTURE_RULER_VALUES.length);
   if (index !== selectedApertureIndex) {
     selectedApertureIndex = index;
-    activeExposureAxis = "aperture";
     highlightSelectedRulerIndex(apertureRuler, selectedApertureIndex);
     updateShutterRulerFromAperture(lockedEV, true);
   }
@@ -760,12 +767,11 @@ function onApertureRulerScroll() {
 function onShutterRulerScroll() {
   if (isShutterAutoScrolling) return;
   if (shouldIgnoreScrollFromAxis("shutter")) return;
-  markManualExposureInteraction("shutter");
+  markUserExposureIntent("shutter");
 
   const index = getCenteredRulerIndex(shutterRuler, RULER_SHUTTERS.length);
   if (index !== selectedShutterIndex) {
     selectedShutterIndex = index;
-    activeExposureAxis = "shutter";
     highlightSelectedRulerIndex(shutterRuler, selectedShutterIndex);
     updateApertureRulerFromShutter(lockedEV, true);
   }
