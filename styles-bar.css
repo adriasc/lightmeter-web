@@ -436,8 +436,19 @@ select {
   text-align: center;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: #d8e0ec;
-  opacity: 0.45;
+  opacity: 0.42;
   transition: opacity 120ms ease;
+}
+
+.ruler-col.is-whole-stop {
+  opacity: 0.76;
+}
+
+.ruler-col.is-whole-stop .ruler-top,
+.ruler-col.is-whole-stop .ruler-bottom {
+  color: #f1f7ff;
+  font-weight: 900;
+  text-shadow: 0 0 7px rgba(182, 216, 255, 0.26);
 }
 
 .ruler-col.is-selected {
@@ -451,6 +462,10 @@ select {
   line-height: 1;
 }
 
+.ruler-col.is-whole-stop .ruler-top {
+  font-size: 1rem;
+}
+
 .ruler-tick {
   display: none;
 }
@@ -460,4 +475,8 @@ select {
   font-weight: 800;
   line-height: 1;
   color: #ffffff;
+}
+
+.ruler-col.is-whole-stop .ruler-bottom {
+  font-size: 1.14rem;
 }

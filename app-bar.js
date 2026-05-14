@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.9.1";
+const APP_VERSION = "2.10.0";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -7,7 +7,7 @@ const APERTURE_RULER_VALUES = [
   8.0, 9.0, 10.0, 11.0, 13.0, 14.0,
   16.0, 18.0, 20.0, 22.0
 ];
-const RULER_SHUTTERS = [
+const SHUTTER_VALUES_BASE = [
   1 / 8000, 1 / 6400, 1 / 5000, 1 / 4000, 1 / 3200, 1 / 2500, 1 / 2000, 1 / 1600,
   1 / 1250, 1 / 1000, 1 / 800, 1 / 640, 1 / 500, 1 / 400, 1 / 320, 1 / 250,
   1 / 200, 1 / 160, 1 / 125, 1 / 100, 1 / 80, 1 / 60, 1 / 50, 1 / 40,
@@ -15,6 +15,12 @@ const RULER_SHUTTERS = [
   1 / 5, 1 / 4, 0.3, 0.4, 0.5, 0.6, 0.8,
   1.0, 1.3, 1.6, 2.0, 2.5, 3.2, 4.0, 5.0, 6.0,
   8.0, 10.0, 13.0, 15.0, 20.0, 25.0, 30.0
+];
+const RULER_SHUTTERS = [...SHUTTER_VALUES_BASE].reverse();
+const APERTURE_FULL_STOPS = [1.0, 1.4, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0, 22.0];
+const SHUTTER_FULL_STOPS = [
+  1 / 8000, 1 / 4000, 1 / 2000, 1 / 1000, 1 / 500, 1 / 250, 1 / 125, 1 / 60,
+  1 / 30, 1 / 15, 1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 15, 30
 ];
 
 const GRID_ROWS = 10;
@@ -63,7 +69,7 @@ const MIN_METER_CALIBRATION_STOPS = -8.0;
 const MAX_METER_CALIBRATION_STOPS = 8.0;
 const RULER_AUTO_SCROLL_GUARD_MS = 260;
 const EXPOSURE_INDEX_HYSTERESIS_STOPS = 0.24;
-const MANUAL_EXPOSURE_INTERACTION_HOLD_MS = 420;
+const MANUAL_EXPOSURE_INTERACTION_HOLD_MS = 700;
 
 const FILM_PROFILES = [
   { id: "portra800", name: "Kodak Portra 800", shadow: 3.3, highlight: 5.3 },
@@ -123,6 +129,7 @@ let lockedEV = 10;
 let selectedApertureIndex = findClosestExposureIndex(APERTURE_RULER_VALUES, 5.6);
 let selectedShutterIndex = findClosestExposureIndex(RULER_SHUTTERS, 1 / 125);
 let activeExposureAxis = "aperture";
+let manualExposureAxis = activeExposureAxis;
 let isApertureAutoScrolling = false;
 let isShutterAutoScrolling = false;
 let manualExposureInteractionUntilTs = 0;
@@ -179,12 +186,12 @@ function init() {
   isoSelect.addEventListener("blur", onIsoChanged);
   apertureRuler.addEventListener("scroll", onApertureRulerScroll, { passive: true });
   shutterRuler.addEventListener("scroll", onShutterRulerScroll, { passive: true });
-  apertureRuler.addEventListener("pointerdown", markManualExposureInteraction, { passive: true });
-  shutterRuler.addEventListener("pointerdown", markManualExposureInteraction, { passive: true });
-  apertureRuler.addEventListener("touchstart", markManualExposureInteraction, { passive: true });
-  shutterRuler.addEventListener("touchstart", markManualExposureInteraction, { passive: true });
-  apertureRuler.addEventListener("wheel", markManualExposureInteraction, { passive: true });
-  shutterRuler.addEventListener("wheel", markManualExposureInteraction, { passive: true });
+  apertureRuler.addEventListener("pointerdown", onApertureRulerInteractionStart, { passive: true });
+  shutterRuler.addEventListener("pointerdown", onShutterRulerInteractionStart, { passive: true });
+  apertureRuler.addEventListener("touchstart", onApertureRulerInteractionStart, { passive: true });
+  shutterRuler.addEventListener("touchstart", onShutterRulerInteractionStart, { passive: true });
+  apertureRuler.addEventListener("wheel", onApertureRulerInteractionStart, { passive: true });
+  shutterRuler.addEventListener("wheel", onShutterRulerInteractionStart, { passive: true });
   window.addEventListener("resize", onResize);
 }
 
@@ -312,12 +319,36 @@ function getMeterUpdateIntervalMs() {
   return UPDATE_INTERVAL_SIMPLE_MS;
 }
 
-function markManualExposureInteraction() {
+function onApertureRulerInteractionStart() {
+  markManualExposureInteraction("aperture");
+}
+
+function onShutterRulerInteractionStart() {
+  markManualExposureInteraction("shutter");
+}
+
+function markManualExposureInteraction(axis) {
+  if (axis === "aperture" || axis === "shutter") {
+    manualExposureAxis = axis;
+    activeExposureAxis = axis;
+  }
   manualExposureInteractionUntilTs = Date.now() + MANUAL_EXPOSURE_INTERACTION_HOLD_MS;
 }
 
 function isManualExposureInteractionActive() {
   return Date.now() < manualExposureInteractionUntilTs;
+}
+
+function getSyncExposureAxis() {
+  if (isManualExposureInteractionActive() && (manualExposureAxis === "aperture" || manualExposureAxis === "shutter")) {
+    return manualExposureAxis;
+  }
+  return activeExposureAxis;
+}
+
+function shouldIgnoreScrollFromAxis(axis) {
+  if (!isManualExposureInteractionActive()) return false;
+  return manualExposureAxis !== axis;
 }
 
 function setupFilmControls() {
@@ -658,16 +689,18 @@ function meterFrame() {
 
 function buildRulers() {
   apertureRuler.innerHTML = APERTURE_RULER_VALUES.map((aperture) => {
-    return `<div class="ruler-col"><div class="ruler-top">f/${aperture.toFixed(1)}</div><div class="ruler-tick"></div><div class="ruler-bottom">&nbsp;</div></div>`;
+    const isWholeStop = isWholeStopValue(aperture, APERTURE_FULL_STOPS);
+    return `<div class="ruler-col${isWholeStop ? " is-whole-stop" : ""}"><div class="ruler-top">f/${aperture.toFixed(1)}</div><div class="ruler-tick"></div><div class="ruler-bottom">&nbsp;</div></div>`;
   }).join("");
 
   shutterRuler.innerHTML = RULER_SHUTTERS.map((shutter) => {
-    return `<div class="ruler-col"><div class="ruler-top">&nbsp;</div><div class="ruler-tick"></div><div class="ruler-bottom">${formatShutter(shutter)}</div></div>`;
+    const isWholeStop = isWholeStopValue(shutter, SHUTTER_FULL_STOPS);
+    return `<div class="ruler-col${isWholeStop ? " is-whole-stop" : ""}"><div class="ruler-top">&nbsp;</div><div class="ruler-tick"></div><div class="ruler-bottom">${formatShutter(shutter)}</div></div>`;
   }).join("");
 }
 
 function syncRulersFromActiveAxis(smoothScroll) {
-  if (activeExposureAxis === "shutter") {
+  if (getSyncExposureAxis() === "shutter") {
     updateApertureRulerFromShutter(lockedEV, smoothScroll);
   } else {
     updateShutterRulerFromAperture(lockedEV, smoothScroll);
@@ -712,7 +745,8 @@ function updateApertureRulerFromShutter(ev100, smoothScroll) {
 
 function onApertureRulerScroll() {
   if (isApertureAutoScrolling) return;
-  markManualExposureInteraction();
+  if (shouldIgnoreScrollFromAxis("aperture")) return;
+  markManualExposureInteraction("aperture");
 
   const index = getCenteredRulerIndex(apertureRuler, APERTURE_RULER_VALUES.length);
   if (index !== selectedApertureIndex) {
@@ -725,7 +759,8 @@ function onApertureRulerScroll() {
 
 function onShutterRulerScroll() {
   if (isShutterAutoScrolling) return;
-  markManualExposureInteraction();
+  if (shouldIgnoreScrollFromAxis("shutter")) return;
+  markManualExposureInteraction("shutter");
 
   const index = getCenteredRulerIndex(shutterRuler, RULER_SHUTTERS.length);
   if (index !== selectedShutterIndex) {
@@ -982,6 +1017,10 @@ function formatShutter(seconds) {
   if (seconds >= 1) return `${seconds.toFixed(1)}s`;
   if (seconds >= 0.3) return `${seconds.toFixed(1)}s`;
   return `1/${Math.round(1 / seconds)}`;
+}
+
+function isWholeStopValue(value, wholeStops) {
+  return wholeStops.some((stopValue) => Math.abs(Math.log2(value / stopValue)) <= 0.08);
 }
 
 function smoothGrid(prevGrid, nextGrid, alpha) {
