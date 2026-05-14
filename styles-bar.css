@@ -237,6 +237,16 @@ video,
   pointer-events: none;
 }
 
+.meter-patch {
+  position: absolute;
+  border: 1.5px dashed rgba(255, 245, 166, 0.88);
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.36), inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+  z-index: 2;
+}
+
 .avg-markers {
   position: absolute;
   inset: 0;
@@ -354,7 +364,7 @@ video,
 }
 
 .pro-row input {
-  width: 56px;
+  width: 58px;
   padding: 3px 6px;
   border-radius: 8px;
   border: 1px solid #3e4f67;

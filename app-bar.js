@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.8.1";
+const APP_VERSION = "2.9.0";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -19,7 +19,7 @@ const RULER_SHUTTERS = [
 
 const GRID_ROWS = 10;
 const GRID_COLS = 14;
-const EV_CALIBRATION_OFFSET = 4.5;
+const EV_CALIBRATION_OFFSET = 0.0;
 
 const UPDATE_INTERVAL_SIMPLE_MS = 320;
 const UPDATE_INTERVAL_PRO_MS = 260;
@@ -46,6 +46,7 @@ const FILM_PROFILE_STORAGE_KEY = "filmLightMeterProfile";
 const SHADOW_LATITUDE_STORAGE_KEY = "filmLightMeterShadowLatitude";
 const HIGHLIGHT_LATITUDE_STORAGE_KEY = "filmLightMeterHighlightLatitude";
 const METERING_MODE_STORAGE_KEY = "filmLightMeterMeteringMode";
+const METER_CALIBRATION_STORAGE_KEY = "filmLightMeterCalibrationStops";
 const SIMPLE_MODE_HINT = "Tap to set the metering point. Each number covers about 1/14 width x 1/10 height of frame.";
 const PRO_MODE_HINT = "Tap to set the metering point. Each number covers about 1/14 width x 1/10 height of frame. Blue/red = far zones, yellow = frame-average zones, black/white = super-extreme zones (about +/-8 stops).";
 const AVG_MARKER_MAX_COUNT = 4;
@@ -57,6 +58,11 @@ const DEFAULT_FILM_PROFILE_ID = "portra800";
 const SUPER_SHADOW_CLIP_STOPS = 8.0;
 const SUPER_HIGHLIGHT_CLIP_STOPS = 8.0;
 const DEFAULT_METERING_MODE_ID = "spot";
+const DEFAULT_METER_CALIBRATION_STOPS = 0.0;
+const MIN_METER_CALIBRATION_STOPS = -8.0;
+const MAX_METER_CALIBRATION_STOPS = 8.0;
+const RULER_AUTO_SCROLL_GUARD_MS = 260;
+const EXPOSURE_INDEX_HYSTERESIS_STOPS = 0.24;
 
 const FILM_PROFILES = [
   { id: "portra800", name: "Kodak Portra 800", shadow: 3.3, highlight: 5.3 },
@@ -68,15 +74,16 @@ const FILM_PROFILES = [
 ];
 
 const METERING_MODES = [
-  { id: "spot", name: "Spot (small)", radiusRatio: 0.008, minRadiusPx: 5, maxRadiusPx: 14 },
-  { id: "balanced", name: "Balanced", radiusRatio: 0.02, minRadiusPx: 12, maxRadiusPx: 42 },
-  { id: "average", name: "Average (wide)", radiusRatio: 0.06, minRadiusPx: 26, maxRadiusPx: 120 }
+  { id: "spot", name: "Spot (small)", radiusRatio: 0.004, minRadiusPx: 3, maxRadiusPx: 10 },
+  { id: "balanced", name: "Balanced", radiusRatio: 0.04, minRadiusPx: 20, maxRadiusPx: 80 },
+  { id: "average", name: "Average (wide)", radiusRatio: 0.12, minRadiusPx: 50, maxRadiusPx: 180 }
 ];
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("meterCanvas");
 const zoneOverlay = document.getElementById("zoneOverlay");
 const tapMarker = document.getElementById("tapMarker");
+const meterPatch = document.getElementById("meterPatch");
 const avgMarkers = document.getElementById("avgMarkers");
 const startBtn = document.getElementById("startBtn");
 const evReadout = document.getElementById("evReadout");
@@ -85,6 +92,7 @@ const hintBanner = document.getElementById("hintBanner");
 const modeSimpleBtn = document.getElementById("modeSimpleBtn");
 const modeProBtn = document.getElementById("modeProBtn");
 const filmProfileSelect = document.getElementById("filmProfileSelect");
+const meterCalibrationInput = document.getElementById("meterCalibrationInput");
 const shadowLatitudeInput = document.getElementById("shadowLatitudeInput");
 const highlightLatitudeInput = document.getElementById("highlightLatitudeInput");
 const clipStats = document.getElementById("clipStats");
@@ -103,6 +111,7 @@ let selectedFilmProfileId = readInitialFilmProfileId();
 let shadowLatitudeStops = readInitialLatitude(SHADOW_LATITUDE_STORAGE_KEY, 3.3);
 let highlightLatitudeStops = readInitialLatitude(HIGHLIGHT_LATITUDE_STORAGE_KEY, 5.3);
 let selectedMeteringModeId = readInitialMeteringModeId();
+let meterCalibrationStops = readInitialMeterCalibrationStops();
 
 let animationFrameId = null;
 let lastMeterTs = 0;
@@ -140,6 +149,7 @@ function init() {
   });
 
   renderTapMarker();
+  renderMeterPatchFromCurrentVideo();
   renderAverageMarkers();
   createZoneCells();
   paintReferenceCell();
@@ -200,6 +210,20 @@ function readInitialMeteringModeId() {
   return DEFAULT_METERING_MODE_ID;
 }
 
+function readInitialMeterCalibrationStops() {
+  try {
+    const raw = localStorage.getItem(METER_CALIBRATION_STORAGE_KEY);
+    if (raw === null || raw === "") return DEFAULT_METER_CALIBRATION_STOPS;
+    const value = Number(raw);
+    if (Number.isFinite(value)) {
+      return clamp(value, MIN_METER_CALIBRATION_STOPS, MAX_METER_CALIBRATION_STOPS);
+    }
+  } catch {
+    // Ignore storage access issues.
+  }
+  return DEFAULT_METER_CALIBRATION_STOPS;
+}
+
 function readInitialLatitude(storageKey, fallbackValue) {
   try {
     const raw = localStorage.getItem(storageKey);
@@ -234,7 +258,9 @@ function onMeteringModeChanged() {
   if (!meteringModeSelect) return;
   selectedMeteringModeId = getMeteringModeById(meteringModeSelect.value).id;
   meteringModeSelect.value = selectedMeteringModeId;
+  smoothedRefLuma = null;
   persistMeteringMode();
+  renderMeterPatchFromCurrentVideo();
 }
 
 function persistMeteringMode() {
@@ -256,6 +282,23 @@ function getReferencePatchRadiusPx(frameW, frameH) {
   return clamp(radius, mode.minRadiusPx, mode.maxRadiusPx);
 }
 
+function getDisplayMeterPatchRadiusPx(sourceW, sourceH) {
+  const sourceRadius = getReferencePatchRadiusPx(sourceW, sourceH);
+  const rect = cameraWrap.getBoundingClientRect();
+  const displayedScale = Math.max(
+    rect.width / Math.max(sourceW, 1),
+    rect.height / Math.max(sourceH, 1)
+  );
+  return sourceRadius * displayedScale;
+}
+
+function renderMeterPatchFromCurrentVideo() {
+  const sourceW = video.videoWidth || Math.max(1, Math.round(cameraWrap.getBoundingClientRect().width));
+  const sourceH = video.videoHeight || Math.max(1, Math.round(cameraWrap.getBoundingClientRect().height));
+  const radiusPx = getDisplayMeterPatchRadiusPx(sourceW, sourceH);
+  renderMeterPatch(radiusPx);
+}
+
 function getMeterUpdateIntervalMs() {
   if (uiMode === MODE_PRO) return UPDATE_INTERVAL_PRO_MS;
   return UPDATE_INTERVAL_SIMPLE_MS;
@@ -274,6 +317,10 @@ function setupFilmControls() {
 
   shadowLatitudeInput.addEventListener("change", onLatitudeInputChange);
   highlightLatitudeInput.addEventListener("change", onLatitudeInputChange);
+  if (meterCalibrationInput) {
+    meterCalibrationInput.addEventListener("change", onMeterCalibrationInputChange);
+    meterCalibrationInput.addEventListener("input", onMeterCalibrationInputChange);
+  }
 }
 
 function getFilmProfileById(profileId) {
@@ -310,10 +357,25 @@ function onLatitudeInputChange() {
   persistFilmSettings();
 }
 
+function onMeterCalibrationInputChange() {
+  if (!meterCalibrationInput) return;
+  const value = clamp(
+    Number(meterCalibrationInput.value),
+    MIN_METER_CALIBRATION_STOPS,
+    MAX_METER_CALIBRATION_STOPS
+  );
+  if (!Number.isFinite(value)) return;
+  meterCalibrationStops = value;
+  meterCalibrationInput.value = meterCalibrationStops.toFixed(1);
+  persistFilmSettings();
+  syncRulersFromActiveAxis(false);
+}
+
 function refreshFilmControlUI() {
   if (filmProfileSelect) filmProfileSelect.value = selectedFilmProfileId;
   if (shadowLatitudeInput) shadowLatitudeInput.value = shadowLatitudeStops.toFixed(1);
   if (highlightLatitudeInput) highlightLatitudeInput.value = highlightLatitudeStops.toFixed(1);
+  if (meterCalibrationInput) meterCalibrationInput.value = meterCalibrationStops.toFixed(1);
 }
 
 function persistFilmSettings() {
@@ -321,6 +383,7 @@ function persistFilmSettings() {
     localStorage.setItem(FILM_PROFILE_STORAGE_KEY, selectedFilmProfileId);
     localStorage.setItem(SHADOW_LATITUDE_STORAGE_KEY, shadowLatitudeStops.toFixed(1));
     localStorage.setItem(HIGHLIGHT_LATITUDE_STORAGE_KEY, highlightLatitudeStops.toFixed(1));
+    localStorage.setItem(METER_CALIBRATION_STORAGE_KEY, meterCalibrationStops.toFixed(1));
   } catch {
     // Ignore storage access issues.
   }
@@ -378,6 +441,7 @@ async function startCamera() {
     video.srcObject = stream;
     await video.play();
     applyWiderFraming(stream);
+    renderMeterPatchFromCurrentVideo();
 
     startBtn.style.display = "none";
     loopMetering();
@@ -417,13 +481,23 @@ function onCameraTap(event) {
   const row = clamp(Math.floor(referencePoint.y * GRID_ROWS), 0, GRID_ROWS - 1);
   referenceCell = { row, col };
 
+  smoothedRefLuma = null;
   renderTapMarker();
+  renderMeterPatchFromCurrentVideo();
   paintReferenceCell();
 }
 
 function renderTapMarker() {
   tapMarker.style.left = `${referencePoint.x * 100}%`;
   tapMarker.style.top = `${referencePoint.y * 100}%`;
+}
+
+function renderMeterPatch(radiusPx) {
+  if (!meterPatch) return;
+  meterPatch.style.left = `${referencePoint.x * 100}%`;
+  meterPatch.style.top = `${referencePoint.y * 100}%`;
+  meterPatch.style.width = `${Math.max(6, radiusPx * 2)}px`;
+  meterPatch.style.height = `${Math.max(6, radiusPx * 2)}px`;
 }
 
 function renderAverageMarkers() {
@@ -554,7 +628,7 @@ function meterFrame() {
 
   updateZoneOverlay(zoneStops);
 
-  const rawEV = Math.log2(refLuma * 100) + EV_CALIBRATION_OFFSET;
+  const rawEV = Math.log2(refLuma * 100) + EV_CALIBRATION_OFFSET + meterCalibrationStops;
   smoothedEV = blend(smoothedEV, rawEV, EV_SMOOTHING);
 
   lockedEV = smoothedEV;
@@ -583,7 +657,12 @@ function syncRulersFromActiveAxis(smoothScroll) {
 function updateShutterRulerFromAperture(ev100, smoothScroll) {
   const selectedAperture = APERTURE_RULER_VALUES[selectedApertureIndex];
   const requiredShutter = shutterSeconds(ev100, selectedISO, selectedAperture);
-  const nextShutterIndex = findClosestExposureIndex(RULER_SHUTTERS, requiredShutter);
+  const nextShutterIndex = chooseStableExposureIndex(
+    RULER_SHUTTERS,
+    selectedShutterIndex,
+    requiredShutter,
+    smoothScroll ? 0 : EXPOSURE_INDEX_HYSTERESIS_STOPS
+  );
   const changed = nextShutterIndex !== selectedShutterIndex;
   selectedShutterIndex = nextShutterIndex;
 
@@ -596,7 +675,12 @@ function updateShutterRulerFromAperture(ev100, smoothScroll) {
 function updateApertureRulerFromShutter(ev100, smoothScroll) {
   const selectedShutter = RULER_SHUTTERS[selectedShutterIndex];
   const requiredAperture = apertureFor(ev100, selectedISO, selectedShutter);
-  const nextApertureIndex = findClosestExposureIndex(APERTURE_RULER_VALUES, requiredAperture);
+  const nextApertureIndex = chooseStableExposureIndex(
+    APERTURE_RULER_VALUES,
+    selectedApertureIndex,
+    requiredAperture,
+    smoothScroll ? 0 : EXPOSURE_INDEX_HYSTERESIS_STOPS
+  );
   const changed = nextApertureIndex !== selectedApertureIndex;
   selectedApertureIndex = nextApertureIndex;
 
@@ -635,6 +719,7 @@ function onResize() {
   setRulerSidePadding(shutterRuler);
   centerRulerAtIndex(apertureRuler, selectedApertureIndex, false);
   centerRulerAtIndex(shutterRuler, selectedShutterIndex, false);
+  renderMeterPatchFromCurrentVideo();
   syncRulersFromActiveAxis(false);
 }
 
@@ -652,7 +737,7 @@ function centerRulerAtIndex(rulerEl, index, smoothScroll) {
     rulerEl.scrollTo({ left: target, behavior: smoothScroll ? "smooth" : "auto" });
     window.setTimeout(() => {
       isApertureAutoScrolling = false;
-    }, smoothScroll ? 220 : 0);
+    }, RULER_AUTO_SCROLL_GUARD_MS);
     return;
   }
 
@@ -661,7 +746,7 @@ function centerRulerAtIndex(rulerEl, index, smoothScroll) {
     rulerEl.scrollTo({ left: target, behavior: smoothScroll ? "smooth" : "auto" });
     window.setTimeout(() => {
       isShutterAutoScrolling = false;
-    }, smoothScroll ? 220 : 0);
+    }, RULER_AUTO_SCROLL_GUARD_MS);
     return;
   }
 
@@ -697,6 +782,19 @@ function findClosestExposureIndex(values, target) {
   }
 
   return bestIdx;
+}
+
+function chooseStableExposureIndex(values, currentIndex, target, hysteresisStops) {
+  const nearestIndex = findClosestExposureIndex(values, target);
+  if (nearestIndex === currentIndex) return currentIndex;
+  if (target <= 0) return nearestIndex;
+
+  const currentValue = values[currentIndex];
+  if (!currentValue || currentValue <= 0) return nearestIndex;
+
+  const currentErrorStops = Math.abs(Math.log2(currentValue / target));
+  if (currentErrorStops <= hysteresisStops) return currentIndex;
+  return nearestIndex;
 }
 
 function updateZoneOverlay(zoneStops) {
