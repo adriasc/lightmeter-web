@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.10.5";
+const APP_VERSION = "2.11.0";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -25,14 +25,20 @@ const SHUTTER_FULL_STOPS = [
 
 const GRID_ROWS = 10;
 const GRID_COLS = 14;
-const EV_CALIBRATION_OFFSET = 0.0;
+// Fallback calibration for browsers that hide physical camera exposure metadata.
+const PREVIEW_EV_CALIBRATION_OFFSET = 7.0;
+// W3C Image Capture defines exposureTime in 100-microsecond units.
+const CAMERA_EXPOSURE_TIME_UNIT_SECONDS = 0.0001;
+const DEFAULT_CAMERA_APERTURE = 1.8;
+const MIN_VALID_CAMERA_EV100 = -10;
+const MAX_VALID_CAMERA_EV100 = 30;
 
 const UPDATE_INTERVAL_SIMPLE_MS = 320;
 const UPDATE_INTERVAL_PRO_MS = 260;
 const GRID_SMOOTHING = 0.34;
 const EV_SMOOTHING = 0.25;
 const NEAR_ZERO_THRESHOLD = 0.2;
-const STOP_EXPANSION_FACTOR = 1.8;
+const STOP_EXPANSION_FACTOR = 1.0;
 const REF_PATCH_STEP_PX = 1;
 const ZONE_PATCH_RATIO = 0.06;
 const ZONE_PATCH_STEP_PX = 2;
@@ -52,7 +58,7 @@ const FILM_PROFILE_STORAGE_KEY = "filmLightMeterProfile";
 const SHADOW_LATITUDE_STORAGE_KEY = "filmLightMeterShadowLatitude";
 const HIGHLIGHT_LATITUDE_STORAGE_KEY = "filmLightMeterHighlightLatitude";
 const METERING_MODE_STORAGE_KEY = "filmLightMeterMeteringMode";
-const METER_CALIBRATION_STORAGE_KEY = "filmLightMeterCalibrationStops";
+const METER_CALIBRATION_STORAGE_KEY = "filmLightMeterCalibrationStopsV2";
 const SIMPLE_MODE_HINT = "Tap to set the metering point. Each number covers about 1/14 width x 1/10 height of frame.";
 const PRO_MODE_HINT = "Tap to set the metering point. Each number covers about 1/14 width x 1/10 height of frame. Blue/red = far zones, yellow = frame-average zones, black/white = super-extreme zones (about +/-8 stops).";
 const AVG_MARKER_MAX_COUNT = 4;
@@ -84,7 +90,7 @@ const FILM_PROFILES = [
 const METERING_MODES = [
   { id: "spot", name: "Spot (small)", radiusRatio: 0.004, minRadiusPx: 3, maxRadiusPx: 10 },
   { id: "balanced", name: "Balanced", radiusRatio: 0.04, minRadiusPx: 20, maxRadiusPx: 80 },
-  { id: "average", name: "Average (wide)", radiusRatio: 0.12, minRadiusPx: 50, maxRadiusPx: 180 }
+  { id: "average", name: "Average (wide)", radiusRatio: 0.24, minRadiusPx: 80, maxRadiusPx: 320 }
 ];
 
 const video = document.getElementById("video");
@@ -123,6 +129,7 @@ let meterCalibrationStops = readInitialMeterCalibrationStops();
 
 let animationFrameId = null;
 let lastMeterTs = 0;
+let cameraTrack = null;
 let smoothedGrid = null;
 let smoothedEV = 10;
 let smoothedRefLuma = null;
@@ -494,6 +501,7 @@ async function startCamera() {
     });
 
     video.srcObject = stream;
+    cameraTrack = stream.getVideoTracks()[0] || null;
     await video.play();
     applyWiderFraming(stream);
     renderMeterPatchFromCurrentVideo();
@@ -501,6 +509,7 @@ async function startCamera() {
     startBtn.style.display = "none";
     loopMetering();
   } catch {
+    cameraTrack = null;
     startBtn.disabled = false;
     startBtn.textContent = "Camera permission needed";
   }
@@ -683,7 +692,8 @@ function meterFrame() {
 
   updateZoneOverlay(zoneStops);
 
-  const rawEV = Math.log2(refLuma * 100) + EV_CALIBRATION_OFFSET + meterCalibrationStops;
+  const frameAverageLuma = getGridLogAverageLuma(smoothedGrid);
+  const rawEV = calculateSceneEV100(refLuma, frameAverageLuma);
   smoothedEV = blend(smoothedEV, rawEV, EV_SMOOTHING);
 
   if (isManualExposureInteractionActive()) {
@@ -1031,6 +1041,63 @@ function formatZoneValueMarkup(value) {
   const [whole, fraction = "0"] = absText.split(".");
   if (whole === "0") return `.${fraction}`;
   return `${whole}<span class="zone-decimal">.${fraction}</span>`;
+}
+
+function calculateSceneEV100(refLuma, frameAverageLuma) {
+  // Auto-exposure normalizes preview brightness, so prefer physical exposure metadata.
+  const cameraEV100 = readCameraMetadataEV100();
+  if (cameraEV100 !== null) {
+    const relativeStops = clamp(
+      Math.log2(Math.max(refLuma, 1e-4) / Math.max(frameAverageLuma, 1e-4)),
+      -8,
+      8
+    );
+    return cameraEV100 + relativeStops + meterCalibrationStops;
+  }
+
+  return Math.log2(Math.max(refLuma, 1e-4) * 100)
+    + PREVIEW_EV_CALIBRATION_OFFSET
+    + meterCalibrationStops;
+}
+
+function readCameraMetadataEV100() {
+  if (!cameraTrack || typeof cameraTrack.getSettings !== "function") return null;
+
+  const settings = cameraTrack.getSettings();
+  const exposureTimeUnits = Number(settings.exposureTime);
+  const cameraISO = Number(settings.iso);
+  const reportedAperture = Number(settings.aperture ?? settings.lensAperture);
+  const cameraAperture = Number.isFinite(reportedAperture) && reportedAperture > 0
+    ? reportedAperture
+    : DEFAULT_CAMERA_APERTURE;
+
+  if (!Number.isFinite(exposureTimeUnits) || exposureTimeUnits <= 0) return null;
+  if (!Number.isFinite(cameraISO) || cameraISO <= 0) return null;
+
+  const exposureSeconds = exposureTimeUnits * CAMERA_EXPOSURE_TIME_UNIT_SECONDS;
+  if (exposureSeconds < 1 / 100000 || exposureSeconds > 30) return null;
+  if (cameraISO < 5 || cameraISO > 51200) return null;
+
+  const ev100 = Math.log2((cameraAperture * cameraAperture) / exposureSeconds)
+    - Math.log2(cameraISO / 100);
+  if (!Number.isFinite(ev100) || ev100 < MIN_VALID_CAMERA_EV100 || ev100 > MAX_VALID_CAMERA_EV100) {
+    return null;
+  }
+  return ev100;
+}
+
+function getGridLogAverageLuma(grid) {
+  if (!grid || !grid.length) return 1e-4;
+
+  let logSum = 0;
+  let count = 0;
+  grid.forEach((row) => {
+    row.forEach((value) => {
+      logSum += Math.log(Math.max(value, 1e-4));
+      count += 1;
+    });
+  });
+  return Math.exp(logSum / Math.max(count, 1));
 }
 
 function isWholeStopValue(value, wholeStops) {
