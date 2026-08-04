@@ -1,5 +1,5 @@
 const ISO_VALUES = [25, 50, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 3200];
-const APP_VERSION = "2.11.0";
+const APP_VERSION = "2.11.1";
 const APERTURE_RULER_VALUES = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8,
   2.0, 2.2, 2.5, 2.8, 3.2, 3.5,
@@ -26,7 +26,7 @@ const SHUTTER_FULL_STOPS = [
 const GRID_ROWS = 10;
 const GRID_COLS = 14;
 // Fallback calibration for browsers that hide physical camera exposure metadata.
-const PREVIEW_EV_CALIBRATION_OFFSET = 7.0;
+const PREVIEW_EV_CALIBRATION_OFFSET = 2.6;
 // W3C Image Capture defines exposureTime in 100-microsecond units.
 const CAMERA_EXPOSURE_TIME_UNIT_SECONDS = 0.0001;
 const DEFAULT_CAMERA_APERTURE = 1.8;
@@ -58,7 +58,7 @@ const FILM_PROFILE_STORAGE_KEY = "filmLightMeterProfile";
 const SHADOW_LATITUDE_STORAGE_KEY = "filmLightMeterShadowLatitude";
 const HIGHLIGHT_LATITUDE_STORAGE_KEY = "filmLightMeterHighlightLatitude";
 const METERING_MODE_STORAGE_KEY = "filmLightMeterMeteringMode";
-const METER_CALIBRATION_STORAGE_KEY = "filmLightMeterCalibrationStopsV2";
+const METER_CALIBRATION_STORAGE_KEY = "filmLightMeterCalibrationStopsV3";
 const SIMPLE_MODE_HINT = "Tap to set the metering point. Each number covers about 1/14 width x 1/10 height of frame.";
 const PRO_MODE_HINT = "Tap to set the metering point. Each number covers about 1/14 width x 1/10 height of frame. Blue/red = far zones, yellow = frame-average zones, black/white = super-extreme zones (about +/-8 stops).";
 const AVG_MARKER_MAX_COUNT = 4;
@@ -1064,6 +1064,9 @@ function readCameraMetadataEV100() {
   if (!cameraTrack || typeof cameraTrack.getSettings !== "function") return null;
 
   const settings = cameraTrack.getSettings();
+  // The specification only defines exposureTime as meaningful in manual mode.
+  if (settings.exposureMode !== "manual") return null;
+
   const exposureTimeUnits = Number(settings.exposureTime);
   const cameraISO = Number(settings.iso);
   const reportedAperture = Number(settings.aperture ?? settings.lensAperture);
